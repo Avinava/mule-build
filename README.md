@@ -2,7 +2,7 @@
 
 A type-safe CLI and library for MuleSoft application build automation.
 
-[![npm version](https://badge.fury.io/js/mule-build.svg)](https://badge.fury.io/js/mule-build)
+[![npm version](https://img.shields.io/npm/v/@sfdxy/mule-build.svg)](https://www.npmjs.com/package/@sfdxy/mule-build)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features

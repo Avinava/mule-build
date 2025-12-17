@@ -98,8 +98,9 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     const configChanges: string[] = [];
     const muleDir = join(cwd, 'src', 'main', 'mule');
     // Use temp directory for backups to avoid cluttering the project folder
-    const projectHash = Buffer.from(cwd).toString('base64').replace(/[/+=]/g, '').slice(0, 12);
-    const backupDir = join(tmpdir(), `mule-build-backup-${projectHash}`);
+    // Include timestamp and random suffix for concurrent build safety
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const backupDir = join(tmpdir(), `mule-build-backup-${uniqueId}`);
 
     // Pre-flight check
     const checkResult = await canBuild(cwd);

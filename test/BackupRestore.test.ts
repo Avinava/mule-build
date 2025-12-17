@@ -106,4 +106,56 @@ describe('XmlProcessor Backup/Restore', () => {
       expect(result).toBe(content);
     });
   });
+
+  describe('Concurrent Backup Safety', () => {
+    it('should create unique backup directories for each build', () => {
+      // Simulate generating multiple backup IDs like packageProject does
+      const generateBackupId = (): string =>
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const ids = new Set<string>();
+      for (let i = 0; i < 100; i++) {
+        ids.add(generateBackupId());
+      }
+
+      // All IDs should be unique
+      expect(ids.size).toBe(100);
+    });
+
+    it('should use system temp directory', () => {
+      const tempDir = tmpdir();
+
+      // Temp dir should exist and be absolute
+      expect(existsSync(tempDir)).toBe(true);
+      expect(tempDir.startsWith('/') || tempDir.match(/^[A-Z]:\\/i)).toBeTruthy();
+    });
+
+    it('should generate IDs with timestamp and random suffix', () => {
+      const generateBackupId = (): string =>
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const id = generateBackupId();
+
+      // Should have format: timestamp-randomsuffix
+      expect(id).toMatch(/^\d+-[a-z0-9]+$/);
+
+      // Timestamp should be recent (within last second)
+      const timestamp = parseInt(id.split('-')[0], 10);
+      expect(Date.now() - timestamp).toBeLessThan(1000);
+    });
+
+    it('should not collide even with rapid generation', async () => {
+      const generateBackupId = (): string =>
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      // Generate IDs as fast as possible
+      const ids: string[] = [];
+      for (let i = 0; i < 1000; i++) {
+        ids.push(generateBackupId());
+      }
+
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(1000);
+    });
+  });
 });

@@ -18,13 +18,13 @@ A type-safe CLI and library for MuleSoft application build automation.
 
 ```bash
 # Global installation
-npm install -g mule-build
+npm install -g @sfdxy/mule-build
 
 # Local installation
-npm install mule-build
+npm install @sfdxy/mule-build
 
 # Or use npx directly
-npx mule-build --help
+npx @sfdxy/mule-build --help
 ```
 
 ## Quick Start

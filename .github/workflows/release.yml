@@ -60,7 +60,7 @@ jobs:
           body: |
             ## Install
             ```bash
-            npm install mule-build@${{ steps.version.outputs.VERSION }}
+            npm install @sfdxy/mule-build@${{ steps.version.outputs.VERSION }}
             ```
             
             ## Quick Start

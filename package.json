@@ -43,8 +43,16 @@
     "automation",
     "devops"
   ],
-  "author": "",
+  "author": "Avinava",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Avinava/mule-build"
+  },
+  "bugs": {
+    "url": "https://github.com/Avinava/mule-build/issues"
+  },
+  "homepage": "https://github.com/Avinava/mule-build#readme",
   "dependencies": {
     "chalk": "^5.3.0",
     "commander": "^12.1.0",

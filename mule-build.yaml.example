@@ -1,0 +1,27 @@
+# Example mule-build configuration
+# Copy this file to mule-build.yaml in your project root
+
+# Project settings
+project:
+  # Optional: Override project name (defaults to pom.xml <name> or <artifactId>)
+  # name: "my-mule-api"
+
+# Build profiles
+# Note: Only 'production' is a built-in environment
+# Use --strip-secure flag for local development instead of profiles
+
+profiles:
+  # Production profile for CI/CD
+  production:
+    description: "CI/CD Artifacts"
+    mavenProfile: "prod"          # Maps to <id>prod</id> in pom.xml
+    secureProperties: "enforce"   # Validate all sensitive props have 'secure::'
+    includeSource: false          # Do not include source code
+    enforceGitClean: true         # Require clean git tree
+
+  # Custom profile example for staging
+  # staging:
+  #   description: "Staging Environment"
+  #   mavenProfile: "staging"
+  #   secureProperties: "enforce"
+  #   includeSource: false

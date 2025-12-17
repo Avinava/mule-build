@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core">
+
+    <flow name="processDataFlow">
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    apiKey: Mule::p('secure::api.key'),
+    secretToken: Mule::p('secure::api.secret'),
+    publicId: Mule::p('api.publicId'),
+    config: {
+        password: Mule::p('secure::service.password'),
+        endpoint: Mule::p('service.endpoint')
+    }
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+    <flow name="anotherFlow">
+        <set-variable variableName="credentials" 
+                      value="#[Mule::p('secure::netsuite.consumerKey')]"/>
+    </flow>
+
+</mule>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core">
+
+    <!-- This file has unsecured sensitive properties -->
+    <configuration>
+        <property name="db.password" value="${db.password}"/>
+        <property name="api.secret" value="${api.secret}"/>
+        <property name="auth.token" value="${auth.token}"/>
+        <property name="safe.property" value="${safe.property}"/>
+    </configuration>
+
+</mule>

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Test CLI help
+        run: |
+          node dist/bin/mule-build.js --help
+          node dist/bin/mule-build.js package --help
+          node dist/bin/mule-build.js strip --help
+          node dist/bin/mule-build.js enforce --help
+
+      - name: Test strip command (dry-run)
+        run: |
+          # Create a test XML file
+          mkdir -p test-project/src/main/mule
+          echo '<mule><http:request-config host="${secure::api.host}" /></mule>' > test-project/src/main/mule/global.xml
+          
+          # Run strip with dry-run
+          node dist/bin/mule-build.js strip -d test-project/src/main/mule --dry-run
+          
+          # Verify file wasn't modified
+          grep -q 'secure::' test-project/src/main/mule/global.xml
+
+      - name: Test enforce command
+        run: |
+          # Create test files
+          mkdir -p test-project2/src/main/mule
+          echo '<mule><http:request-config password="${db.password}" /></mule>' > test-project2/src/main/mule/global.xml
+          
+          # Run enforce - should fail (exit 1) because password is not secured
+          ! node dist/bin/mule-build.js enforce -d test-project2/src/main/mule

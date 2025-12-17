@@ -1,6 +1,6 @@
 {
   "name": "@sfdxy/mule-build",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A type-safe CLI and library for MuleSoft application build automation",
   "type": "module",
   "main": "./dist/index.js",

@@ -7,8 +7,11 @@ import { enforceSecure } from '../api/enforce.js';
 import { packageProject } from '../api/package.js';
 import { releaseVersion } from '../api/release.js';
 import { runLocal } from '../api/run.js';
+import { stripSecure } from '../api/strip.js';
 import { BumpType } from '../types/index.js';
 import { loadConfig } from '../config/ConfigLoader.js';
+import { runSystemChecks } from '../config/SystemChecker.js';
+import { stopMuleRuntime, isPortInUse, validateMuleHome } from '../engine/LocalRuntime.js';
 
 /**
  * Mule Build MCP Server
@@ -20,7 +23,7 @@ export class MuleBuildMcpServer {
   constructor() {
     this.server = new McpServer({
       name: 'mule-build',
-      version: '1.0.1',
+      version: '1.1.1',
     });
 
     this.setupTools();
@@ -35,6 +38,12 @@ export class MuleBuildMcpServer {
         description:
           'Builds the MuleSoft application package. Can strip secure properties or enforce production standards.',
         inputSchema: {
+          cwd: z
+            .string()
+            .optional()
+            .describe(
+              'Working directory containing the Mule project (defaults to current directory)'
+            ),
           environment: z
             .enum(['production'])
             .optional()
@@ -50,9 +59,10 @@ export class MuleBuildMcpServer {
           version: z.string().optional().describe('Override version from pom.xml'),
         },
       },
-      async ({ environment, stripSecure, skipTests, withSource, version }) => {
+      async ({ cwd, environment, stripSecure, skipTests, withSource, version }) => {
         try {
           const result = await packageProject({
+            cwd,
             environment: environment as 'production' | undefined,
             stripSecure,
             skipTests,
@@ -100,39 +110,57 @@ export class MuleBuildMcpServer {
       {
         description: 'Bumps the version and creates a git tag/release.',
         inputSchema: {
+          cwd: z
+            .string()
+            .optional()
+            .describe(
+              'Working directory containing the Mule project (defaults to current directory)'
+            ),
           bump: z.enum(['major', 'minor', 'patch']).describe('Version bump type'),
           noTag: z.boolean().optional().describe('Skip git tag creation'),
           noPush: z.boolean().optional().describe('Skip git push'),
         },
       },
-      async ({ bump, noTag, noPush }) => {
+      async ({ cwd, bump, noTag, noPush }) => {
         try {
-          const result = await releaseVersion({
-            bump: bump as BumpType,
-            tag: !noTag,
-            push: !noPush,
-          });
+          // Change to cwd if specified
+          const originalCwd = process.cwd();
+          if (cwd) {
+            process.chdir(cwd);
+          }
 
-          if (!result.success) {
+          try {
+            const result = await releaseVersion({
+              bump: bump as BumpType,
+              tag: !noTag,
+              push: !noPush,
+            });
+
+            if (!result.success) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Release failed: ${result.error?.message}`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
             return {
               content: [
                 {
                   type: 'text',
-                  text: `Release failed: ${result.error?.message}`,
+                  text: `Release successful!\nNew Version: ${result.data?.newVersion}\nTag: ${result.data?.tagName || 'skipped'}`,
                 },
               ],
-              isError: true,
             };
+          } finally {
+            if (cwd) {
+              process.chdir(originalCwd);
+            }
           }
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Release successful!\nNew Version: ${result.data?.newVersion}\nTag: ${result.data?.tagName || 'skipped'}`,
-              },
-            ],
-          };
         } catch (error) {
           return {
             content: [
@@ -153,29 +181,20 @@ export class MuleBuildMcpServer {
       {
         description: 'Checks for unsecured sensitive properties in Mule configuration files.',
         inputSchema: {
+          cwd: z
+            .string()
+            .optional()
+            .describe(
+              'Working directory containing the Mule project (defaults to current directory)'
+            ),
           directory: z.string().optional().describe('Directory to check (default: src/main/mule)'),
         },
       },
-      async ({ directory }) => {
+      async ({ cwd, directory }) => {
         try {
-          const dirToCheck = directory || path.join(process.cwd(), 'src', 'main', 'mule');
-          // Note: enforceSecure API might need adjustment if it prints to console.
-          // Looking at cli.ts, it calls enforceSecure. I should verify if enforceSecure returns data or just logs.
-          // Checked cli.ts: enforceSecure returns Result<EnforceResult>.
+          const workDir = cwd ?? process.cwd();
+          const dirToCheck = directory || path.join(workDir, 'src', 'main', 'mule');
 
-          // I'll need to check if the import 'enforceSecure' is correct or if I should import the core logic.
-          // cli.ts imports from './api/enforce.js'.
-          // Let's use checkForUnsecuredProperties if available or enforceSecure from api.
-          // Based on imports above, I used checkForUnsecuredProperties from ../api/enforce.js
-          // Wait, cli.ts imports `enforceSecure` from `./api/enforce.js`.
-          // I'll stick to `enforceSecure` wrapper if possible, or use the core function if `enforceSecure` is too tied to CLI.
-          // Since I don't see `enforceSecure` exported in my imports list above (I used checkForUnsecuredProperties), let me double check the file content of `src/api/enforce.ts` if needed.
-          // However, I can't browse right now. I'll make a safe bet to use the same import as CLI: `enforceSecure`
-
-          // Actually, I imported `checkForUnsecuredProperties` in the code block above. Let me correct that to `enforceSecure` to match CLI usage pattern which returns structured data.
-          // If `enforceSecure` is not exported, I'll have to fix it. `cli.ts` imports it, so it must be exported.
-
-          // RE-WRITING THE IMPORT IN THE CODE BLOCK BELOW
           const checkResult = await enforceSecure({ directory: dirToCheck });
 
           if (!checkResult.success) {
@@ -220,13 +239,20 @@ export class MuleBuildMcpServer {
       {
         description: 'Builds the application and deploys it to the local Mule runtime.',
         inputSchema: {
+          cwd: z
+            .string()
+            .optional()
+            .describe(
+              'Working directory containing the Mule project (defaults to current directory)'
+            ),
           debug: z.boolean().optional().describe('Enable remote debugging on port 5005'),
           clean: z.boolean().optional().describe('Run mvn clean before building'),
         },
       },
-      async ({ debug, clean }) => {
+      async ({ cwd, debug, clean }) => {
         try {
           const result = await runLocal({
+            cwd,
             debug,
             clean,
           });
@@ -257,6 +283,229 @@ export class MuleBuildMcpServer {
               {
                 type: 'text',
                 text: `Run failed with exception: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    // Tool: stop_app
+    this.server.registerTool(
+      'stop_app',
+      {
+        description: 'Stops the local Mule runtime.',
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const result = await stopMuleRuntime();
+
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Stop failed: ${result.error?.message}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Mule runtime stopped successfully.',
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Stop failed with exception: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    // Tool: check_app_status
+    this.server.registerTool(
+      'check_app_status',
+      {
+        description: 'Checks if the Mule runtime is running and the status of port 8081.',
+        inputSchema: {
+          port: z.number().optional().describe('Port to check (default: 8081)'),
+        },
+      },
+      async ({ port }) => {
+        try {
+          const portToCheck = port ?? 8081;
+          const portInUse = await isPortInUse(portToCheck);
+          const muleHomeResult = validateMuleHome();
+
+          const statusParts: string[] = [];
+
+          // Check MULE_HOME
+          if (muleHomeResult.success) {
+            statusParts.push(`MULE_HOME: ${muleHomeResult.data}`);
+          } else {
+            statusParts.push(`MULE_HOME: Not configured (${muleHomeResult.error?.message})`);
+          }
+
+          // Check port
+          statusParts.push(
+            portInUse
+              ? `Port ${portToCheck}: IN USE (app likely running)`
+              : `Port ${portToCheck}: FREE (no app running)`
+          );
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: statusParts.join('\n'),
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Status check failed: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    // Tool: strip_secure
+    this.server.registerTool(
+      'strip_secure',
+      {
+        description:
+          'Strips secure:: prefixes from XML files for local development. Use dry-run first to preview changes.',
+        inputSchema: {
+          cwd: z
+            .string()
+            .optional()
+            .describe(
+              'Working directory containing the Mule project (defaults to current directory)'
+            ),
+          directory: z
+            .string()
+            .optional()
+            .describe('Directory to process (default: src/main/mule)'),
+          dryRun: z.boolean().optional().describe('Preview changes without modifying files'),
+        },
+      },
+      async ({ cwd, directory, dryRun }) => {
+        try {
+          const result = await stripSecure({
+            cwd,
+            directory,
+            dryRun,
+          });
+
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Strip failed: ${result.error?.message}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const mode = dryRun ? 'Would process' : 'Processed';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `${mode} ${result.data?.filesProcessed.length} files with ${result.data?.replacementCount} replacements.${dryRun ? '\n(Dry run - no files modified)' : ''}`,
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Strip failed with exception: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    // Tool: system_check
+    this.server.registerTool(
+      'system_check',
+      {
+        description:
+          'Runs pre-flight system checks to verify Maven, MULE_HOME, pom.xml, and project structure.',
+        inputSchema: {
+          cwd: z
+            .string()
+            .optional()
+            .describe(
+              'Working directory containing the Mule project (defaults to current directory)'
+            ),
+        },
+      },
+      async ({ cwd }) => {
+        try {
+          const workDir = cwd ?? process.cwd();
+          const result = await runSystemChecks(workDir);
+
+          if (!result.success) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `System check failed: ${result.error?.message}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const checks = result.data!;
+          const statusLines = [
+            `Maven: ${checks.maven ? '✓ Installed' : '✗ Not found'}`,
+            `MULE_HOME: ${checks.muleHome ? '✓ Configured' : '✗ Not set (needed for run command)'}`,
+            `pom.xml: ${checks.pomXml ? '✓ Found' : '✗ Not found'}`,
+            `src/main/mule: ${checks.muleSourceDir ? '✓ Found' : '✗ Not found'}`,
+          ];
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `System Check Results:\n${statusLines.join('\n')}`,
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `System check failed: ${error instanceof Error ? error.message : String(error)}`,
               },
             ],
             isError: true,
@@ -298,7 +547,16 @@ export class MuleBuildMcpServer {
           return {
             resources: [
               { uri: 'mule-build://docs/design', name: 'Design', mimeType: 'text/markdown' },
-              // Add more as needed
+              {
+                uri: 'mule-build://docs/best-practices',
+                name: 'Best Practices',
+                mimeType: 'text/markdown',
+              },
+              {
+                uri: 'mule-build://docs/folder-structure',
+                name: 'Folder Structure',
+                mimeType: 'text/markdown',
+              },
             ],
           };
         },
@@ -312,6 +570,8 @@ export class MuleBuildMcpServer {
         // Simple mapping for now
         const docsMap: Record<string, string> = {
           design: 'docs/design.md',
+          'best-practices': 'docs/best-practices.md',
+          'folder-structure': 'docs/folder-structure.md',
         };
 
         const relativePath = docsMap[slug];

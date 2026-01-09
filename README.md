@@ -244,8 +244,25 @@ import type {
 This tool exposes a **Model Context Protocol (MCP)** server, allowing AI agents (like Claude Desktop, IDE assistants) to directly interact with your build system to inspect projects, run builds, and manage releases.
 
 ### Features
-- **Tools**: `run_build` (package project), `run_app` (run locally), `release_version` (git flow), `enforce_security` (scan properties)
-- **Resources**: `mule-build://config` (project settings), `mule-build://docs` (internal documentation)
+
+**Tools** (all support optional `cwd` parameter for remote project directories):
+
+| Tool | Description |
+|------|-------------|
+| `run_build` | Build Mule application package |
+| `run_app` | Deploy to local Mule runtime |
+| `stop_app` | Stop local Mule runtime |
+| `check_app_status` | Check runtime status and port 8081 |
+| `release_version` | Bump version and create git tag |
+| `enforce_security` | Scan for unsecured properties |
+| `strip_secure` | Strip `secure::` prefixes for local dev |
+| `system_check` | Pre-flight environment validation |
+
+**Resources**:
+- `mule-build://config` - Project configuration
+- `mule-build://docs/design` - Design documentation
+- `mule-build://docs/best-practices` - Best practices guide
+- `mule-build://docs/folder-structure` - Project structure conventions
 
 ### Setup for VS Code (Recommended)
 
@@ -280,7 +297,6 @@ Add the following to your `claude_desktop_config.json`:
   }
 }
 ```
-
 
 
 ## Requirements

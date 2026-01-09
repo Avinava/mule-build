@@ -239,6 +239,50 @@ import type {
 } from 'mule-build';
 ```
 
+## AI Agent Integration (MCP)
+
+This tool exposes a **Model Context Protocol (MCP)** server, allowing AI agents (like Claude Desktop, IDE assistants) to directly interact with your build system to inspect projects, run builds, and manage releases.
+
+### Features
+- **Tools**: `run_build` (package project), `run_app` (run locally), `release_version` (git flow), `enforce_security` (scan properties)
+- **Resources**: `mule-build://config` (project settings), `mule-build://docs` (internal documentation)
+
+### Setup for VS Code (Recommended)
+
+1.  Install the **Model Context Protocol** extension in VS Code.
+2.  Open your MCP settings configuration.
+3.  Add the `mule-build` server configuration:
+
+```json
+{
+  "mcpServers": {
+    "mule-build": {
+      "command": "npx",
+      "args": ["-y", "@sfdxy/mule-build", "mcp"]
+    }
+  }
+}
+```
+
+The agent will now be able to "see" your MuleSoft project structure and offer build/release actions autonomously.
+
+### Setup for Claude Desktop
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mule-build": {
+      "command": "npx",
+      "args": ["-y", "@sfdxy/mule-build", "mcp"]
+    }
+  }
+}
+```
+
+
+
 ## Requirements
 
 - Node.js >= 18

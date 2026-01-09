@@ -178,6 +178,17 @@ export function createProgram(): Command {
       }
     });
 
+  // MCP Server command
+  program
+    .command('mcp')
+    .description('Start the Mule Build MCP server')
+    .action(async () => {
+      // Dynamic import to avoid loading MCP SDK unless needed
+      const { MuleBuildMcpServer } = await import('./mcp/index.js');
+      const server = new MuleBuildMcpServer();
+      await server.start();
+    });
+
   return program;
 }
 

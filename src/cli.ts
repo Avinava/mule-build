@@ -79,13 +79,17 @@ export function createProgram(): Command {
   // Run command
   program
     .command('run')
-    .description('Build and deploy to local Mule runtime (strips secure:: automatically)')
+    .description('Build and deploy to local Mule runtime')
     .option('-d, --debug', 'Enable remote debugging on port 5005')
     .option('-c, --clean', 'Run mvn clean before building')
+    .option('--strip-secure', 'Strip secure:: prefixes for local development')
+    .option('-S, --skip-tests', 'Skip MUnit tests')
     .action(async (options) => {
       const result = await runLocal({
         debug: options.debug,
         clean: options.clean,
+        stripSecure: options.stripSecure,
+        skipTests: options.skipTests,
       });
 
       if (!result.success) {

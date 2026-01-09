@@ -83,6 +83,10 @@ export interface RunOptions {
   debug?: boolean;
   /** Run mvn clean before building */
   clean?: boolean;
+  /** Strip secure:: prefixes for local development (explicit opt-in) */
+  stripSecure?: boolean;
+  /** Skip MUnit tests */
+  skipTests?: boolean;
   /** Working directory (defaults to cwd) */
   cwd?: string;
 }

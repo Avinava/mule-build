@@ -85,14 +85,16 @@ mule-build package -e production
 
 ### `run`
 
-Build and deploy to local Mule runtime. Automatically strips `secure::` prefixes.
+Build and deploy to local Mule runtime.
 
 ```bash
 mule-build run [options]
 
 Options:
-  -d, --debug   Enable remote debugging on port 5005
-  -c, --clean   Run mvn clean before building
+  -d, --debug          Enable remote debugging on port 5005
+  -c, --clean          Run mvn clean before building
+  --strip-secure       Strip secure:: prefixes for local development
+  -S, --skip-tests     Skip MUnit tests
 ```
 
 > **Note:** Requires `MULE_HOME` environment variable to be set.

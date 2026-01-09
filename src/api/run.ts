@@ -24,10 +24,10 @@ export async function runLocal(options: RunOptions = {}): Promise<Result<RunResu
 
   logger.info('Building and deploying to local Mule runtime...');
 
-  // Build with stripped secure prefixes for local development
+  // Build - use options for stripSecure and skipTests (both default to false/undefined)
   const packageResult = await packageProject({
-    stripSecure: true, // Strip secure:: for local runtime
-    skipTests: true, // Skip tests for local development
+    stripSecure: options.stripSecure,
+    skipTests: options.skipTests,
     cwd,
   });
 

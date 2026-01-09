@@ -23,7 +23,7 @@ export class MuleBuildMcpServer {
   constructor() {
     this.server = new McpServer({
       name: 'mule-build',
-      version: '1.1.1',
+      version: '1.1.2',
     });
 
     this.setupTools();
@@ -247,14 +247,21 @@ export class MuleBuildMcpServer {
             ),
           debug: z.boolean().optional().describe('Enable remote debugging on port 5005'),
           clean: z.boolean().optional().describe('Run mvn clean before building'),
+          stripSecure: z
+            .boolean()
+            .optional()
+            .describe('Strip secure:: prefixes for local development'),
+          skipTests: z.boolean().optional().describe('Skip MUnit tests'),
         },
       },
-      async ({ cwd, debug, clean }) => {
+      async ({ cwd, debug, clean, stripSecure, skipTests }) => {
         try {
           const result = await runLocal({
             cwd,
             debug,
             clean,
+            stripSecure,
+            skipTests,
           });
 
           if (!result.success) {

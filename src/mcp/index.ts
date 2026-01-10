@@ -28,6 +28,7 @@ export class MuleBuildMcpServer {
 
     this.setupTools();
     this.setupResources();
+    this.setupPrompts();
   }
 
   private setupTools() {
@@ -36,7 +37,7 @@ export class MuleBuildMcpServer {
       'run_build',
       {
         description:
-          'Builds the MuleSoft application package. Can strip secure properties or enforce production standards.',
+          'Compile and package a MuleSoft application into a deployable JAR. Use this when you need to build for deployment to CloudHub, Runtime Fabric, or standalone Mule. Automatically handles environment-specific security requirements—choose "production" to enforce secure properties or "stripSecure" for hassle-free local development.',
         inputSchema: {
           cwd: z
             .string()
@@ -113,7 +114,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'release_version',
       {
-        description: 'Bumps the version and creates a git tag/release.',
+        description:
+          'Automate your release workflow: bump the version in pom.xml, create a git tag, and push—all in one step. Use this instead of manually editing versions and running multiple git commands. Perfect for CI/CD pipelines or when you want consistent, error-free releases.',
         inputSchema: {
           cwd: z
             .string()
@@ -184,7 +186,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'enforce_security',
       {
-        description: 'Checks for unsecured sensitive properties in Mule configuration files.',
+        description:
+          "Prevent credential leaks by scanning your Mule configs for exposed passwords, API keys, and secrets. Run this before commits or deployments to catch properties that should have the secure:: prefix but don't. Essential for security compliance and protecting production credentials.",
         inputSchema: {
           cwd: z
             .string()
@@ -242,7 +245,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'run_app',
       {
-        description: 'Builds the application and deploys it to the local Mule runtime.',
+        description:
+          'Build and instantly run your MuleSoft app locally for rapid development and testing. Deploys to your local Mule runtime (MULE_HOME) so you can test flows, debug with breakpoints, and iterate quickly without deploying to CloudHub. Supports hot reload—make changes and see them immediately.',
         inputSchema: {
           cwd: z
             .string()
@@ -307,7 +311,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'stop_app',
       {
-        description: 'Stops the local Mule runtime.',
+        description:
+          "Gracefully shut down the locally running Mule application. Use this when you're done testing, need to free up port 8081, or want to restart with fresh configuration. Cleaner than killing the process manually.",
         inputSchema: {},
       },
       async () => {
@@ -352,7 +357,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'check_app_status',
       {
-        description: 'Checks if the Mule runtime is running and the status of port 8081.',
+        description:
+          'Quickly diagnose your local Mule environment: Is the runtime running? Is port 8081 in use? Is MULE_HOME configured correctly? Use this to troubleshoot "port already in use" errors or verify your app is actually running before testing.',
         inputSchema: {
           port: z.number().optional().describe('Port to check (default: 8081)'),
         },
@@ -406,7 +412,7 @@ export class MuleBuildMcpServer {
       'strip_secure',
       {
         description:
-          'Strips secure:: prefixes from XML files for local development. Use dry-run first to preview changes.',
+          'Make your Mule configs work locally by removing secure:: prefixes that require the production Secure Properties module. Instead of manually editing XML files for local testing, run this once to convert all encrypted property references to plain text. Always use --dry-run first to preview changes.',
         inputSchema: {
           cwd: z
             .string()
@@ -469,7 +475,7 @@ export class MuleBuildMcpServer {
       'system_check',
       {
         description:
-          'Runs pre-flight system checks to verify Maven, MULE_HOME, pom.xml, and project structure.',
+          'Diagnose environment issues before they break your build. Validates that Maven is installed, MULE_HOME points to a valid runtime, pom.xml exists, and the standard Mule project structure is in place. Run this first when setting up a new machine or troubleshooting build failures.',
         inputSchema: {
           cwd: z
             .string()
@@ -533,7 +539,8 @@ export class MuleBuildMcpServer {
       'config',
       'mule-build://config',
       {
-        description: 'The current resolved configuration for the project.',
+        description:
+          'View the fully resolved project configuration including output directories, environments, and build settings. Useful for debugging configuration issues or understanding how your .mule-build.yaml settings are being interpreted.',
         mimeType: 'application/json',
       },
       async (uri) => {
@@ -574,7 +581,8 @@ export class MuleBuildMcpServer {
         },
       }),
       {
-        description: 'Access internal documentation.',
+        description:
+          'MuleSoft development guides covering architecture decisions, coding standards, folder organization, and integration patterns. Reference these for best practices when building new flows or reviewing existing implementations.',
         mimeType: 'text/markdown',
       },
       async (uri, variables) => {
@@ -619,6 +627,184 @@ export class MuleBuildMcpServer {
             contents: [{ uri: uri.href, text: `Error reading file: ${e}`, mimeType: 'text/plain' }],
           };
         }
+      }
+    );
+  }
+
+  private setupPrompts() {
+    // Prompt: Quick Start - Get a new developer up and running
+    this.server.registerPrompt(
+      'quick-start',
+      {
+        description:
+          'Get started with a MuleSoft project. Verifies your environment, explains the project structure, and runs the app locally. Perfect for onboarding or when you clone a new repo.',
+        argsSchema: {
+          projectPath: z
+            .string()
+            .optional()
+            .describe('Path to the Mule project (defaults to current directory)'),
+        },
+      },
+      async ({ projectPath }) => {
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `I just cloned a MuleSoft project${projectPath ? ` at ${projectPath}` : ''}. Help me get oriented and running:
+
+1. First, run system_check to verify my environment (Maven, MULE_HOME, etc.)
+2. Explain the project structure - what are the key files and folders?
+3. Check for any configuration issues using enforce_security
+4. If everything looks good, run the app locally with run_app so I can test it
+
+Walk me through each step and explain what you're doing.`,
+              },
+            },
+          ],
+        };
+      }
+    );
+
+    // Prompt: Release Checklist - Safe, consistent releases
+    this.server.registerPrompt(
+      'release-checklist',
+      {
+        description:
+          'Execute a safe, repeatable release workflow: security scan, build verification, version bump, and git tagging. Prevents common release mistakes like forgetting security checks or inconsistent versioning.',
+        argsSchema: {
+          bump: z
+            .enum(['major', 'minor', 'patch'])
+            .describe(
+              'Version bump type: major (breaking changes), minor (new features), patch (bug fixes)'
+            ),
+          skipPush: z
+            .boolean()
+            .optional()
+            .describe('Create tags locally but do not push to remote'),
+        },
+      },
+      async ({ bump, skipPush }) => {
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `I want to release a new ${bump} version of this MuleSoft application. Execute the release checklist:
+
+1. **Security Audit**: Run enforce_security to ensure no exposed credentials
+2. **Build Verification**: Run run_build with environment="production" to verify production build works
+3. **Version Bump**: If both checks pass, use release_version with bump="${bump}"${skipPush ? ' and noPush=true' : ''}
+4. **Summary**: Report what version was released and any issues found
+
+Stop immediately if any step fails and explain what needs to be fixed.`,
+              },
+            },
+          ],
+        };
+      }
+    );
+
+    // Prompt: Security Audit - Comprehensive security review
+    this.server.registerPrompt(
+      'security-audit',
+      {
+        description:
+          'Comprehensive security review before deployment. Scans for exposed credentials, validates secure property patterns, and generates a security report. Essential for compliance and pre-production checks.',
+        argsSchema: {
+          detailed: z
+            .boolean()
+            .optional()
+            .describe('Include detailed findings with remediation suggestions'),
+        },
+      },
+      async ({ detailed }) => {
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `Perform a comprehensive security audit of this MuleSoft project:
+
+1. Run enforce_security to scan for unsecured sensitive properties (passwords, API keys, secrets)
+2. Check for any properties that should use the secure:: prefix but don't
+3. Review the property files for hardcoded credentials
+${detailed ? '4. For each finding, explain WHY it is a security risk and HOW to fix it' : ''}
+
+Generate a security report suitable for sharing with the team or compliance review.`,
+              },
+            },
+          ],
+        };
+      }
+    );
+
+    // Prompt: Debug Mode - Troubleshoot a running app
+    this.server.registerPrompt(
+      'debug-mode',
+      {
+        description:
+          'Set up the application for interactive debugging. Starts the app with remote debugging enabled on port 5005 and verifies everything is running correctly. Useful for troubleshooting flows and breakpoint debugging.',
+        argsSchema: {},
+      },
+      async () => {
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `Help me debug this MuleSoft application:
+
+1. First, check if anything is already running with check_app_status
+2. If something is running, stop it with stop_app
+3. Strip secure properties for local testing with strip_secure (dry-run first to show what will change)
+4. Start the app with debug=true using run_app (this enables remote debugging on port 5005)
+5. Verify the app is running with check_app_status
+
+Once running, I can attach a debugger from IntelliJ or VS Code to localhost:5005.`,
+              },
+            },
+          ],
+        };
+      }
+    );
+
+    // Prompt: Local Dev Setup - Prepare for local development
+    this.server.registerPrompt(
+      'local-dev-setup',
+      {
+        description:
+          'Prepare the project for local development by stripping secure properties and running the app. Handles the common pain point of encrypted properties blocking local testing.',
+        argsSchema: {
+          clean: z
+            .boolean()
+            .optional()
+            .describe('Run mvn clean before building to clear cached artifacts'),
+        },
+      },
+      async ({ clean }) => {
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `Set up this MuleSoft project for local development:
+
+1. Run system_check to verify my environment is ready
+2. Use strip_secure with dryRun=true to preview what encrypted properties will be converted
+3. If the preview looks right, run strip_secure again without dryRun to actually make the changes
+4. Build and run the app locally with run_app${clean ? ' and clean=true' : ''}
+
+This workflow converts production-encrypted properties to plain text values so I can test locally without the Secure Properties module.`,
+              },
+            },
+          ],
+        };
       }
     );
   }

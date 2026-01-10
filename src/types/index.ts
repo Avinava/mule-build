@@ -48,6 +48,8 @@ export interface PackageOptions {
   skipTests?: boolean;
   /** Override version */
   version?: string;
+  /** Custom output directory for the built JAR (defaults to target/) */
+  outputDir?: string;
   /** Working directory (defaults to cwd) */
   cwd?: string;
 }

@@ -23,7 +23,7 @@ export class MuleBuildMcpServer {
   constructor() {
     this.server = new McpServer({
       name: 'mule-build',
-      version: '1.1.2',
+      version: '1.2.0',
     });
 
     this.setupTools();
@@ -57,9 +57,13 @@ export class MuleBuildMcpServer {
           skipTests: z.boolean().optional().describe('Skip MUnit tests.'),
           withSource: z.boolean().optional().describe('Include source code in the package.'),
           version: z.string().optional().describe('Override version from pom.xml'),
+          outputDir: z
+            .string()
+            .optional()
+            .describe('Output directory for the built JAR (defaults to target/)'),
         },
       },
-      async ({ cwd, environment, stripSecure, skipTests, withSource, version }) => {
+      async ({ cwd, environment, stripSecure, skipTests, withSource, version, outputDir }) => {
         try {
           const result = await packageProject({
             cwd,
@@ -68,6 +72,7 @@ export class MuleBuildMcpServer {
             skipTests,
             withSource,
             version,
+            outputDir,
           });
 
           if (!result.success) {

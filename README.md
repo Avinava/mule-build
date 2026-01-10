@@ -58,6 +58,7 @@ Options:
   -s, --with-source        Include source code in package (Studio importable)
   -S, --skip-tests         Skip MUnit tests
   --version <version>      Override version from pom.xml
+  -o, --output <path>      Output directory for built JAR (defaults to target/)
 ```
 
 **Examples:**
@@ -71,6 +72,9 @@ mule-build package --strip-secure --skip-tests
 
 # Production build - validates all sensitive properties have secure::
 mule-build package -e production
+
+# Build and output to a custom directory
+mule-build package --strip-secure --skip-tests -o /tmp/builds
 ```
 
 ### Build Modes
@@ -172,6 +176,13 @@ const localResult = await packageProject({
 // Production build with enforcement
 const prodResult = await packageProject({
   environment: 'production',
+});
+
+// Build to a custom output directory
+const customOutputResult = await packageProject({
+  stripSecure: true,
+  skipTests: true,
+  outputDir: '/tmp/builds',
 });
 
 if (result.success) {

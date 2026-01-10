@@ -239,7 +239,16 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     // Copy and rename the JAR
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const finalJarName = `${projectName}${envSuffix}${stripSuffix}-${version}-${timestamp}.jar`;
-    const finalJarPath = join(cwd, 'target', finalJarName);
+
+    // Determine output directory (custom or default target/)
+    const outputDir = options.outputDir ?? join(cwd, 'target');
+
+    // Ensure output directory exists
+    if (options.outputDir) {
+      mkdirSync(outputDir, { recursive: true });
+    }
+
+    const finalJarPath = join(outputDir, finalJarName);
 
     copyFileSync(jarPath, finalJarPath);
 

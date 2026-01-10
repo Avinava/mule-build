@@ -45,6 +45,7 @@ export function createProgram(): Command {
     .option('-s, --with-source', 'Include source code in package (Studio importable)')
     .option('-S, --skip-tests', 'Skip MUnit tests')
     .option('--version <version>', 'Override version')
+    .option('-o, --output <path>', 'Output directory for the built JAR (defaults to target/)')
     .action(async (options) => {
       // Validate environment if provided
       if (options.env && options.env !== 'production') {
@@ -66,6 +67,7 @@ export function createProgram(): Command {
         withSource: options.withSource,
         skipTests: options.skipTests,
         version: options.version,
+        outputDir: options.output,
       });
 
       if (!result.success) {

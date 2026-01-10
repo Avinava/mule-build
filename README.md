@@ -268,14 +268,13 @@ This tool exposes a **Model Context Protocol (MCP)** server, allowing AI agents 
 
 ### Setup for VS Code (Recommended)
 
-1.  Install the **Model Context Protocol** extension in VS Code.
-2.  Open your MCP settings configuration.
-3.  Add the `mule-build` server configuration:
+Create `.vscode/mcp.json` in your workspace:
 
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "mule-build": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "@sfdxy/mule-build", "mcp"]
     }

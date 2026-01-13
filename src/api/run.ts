@@ -37,8 +37,8 @@ export async function runLocal(options: RunOptions = {}): Promise<Result<RunResu
 
   const jarPath = packageResult.data.jarPath;
 
-  // Deploy to local runtime
-  const deployResult = await deployToLocal(jarPath);
+  // Deploy to local runtime (project-aware)
+  const deployResult = await deployToLocal(jarPath, cwd);
 
   if (!deployResult.success || !deployResult.data) {
     return err(deployResult.error ?? new Error('Deployment failed'));

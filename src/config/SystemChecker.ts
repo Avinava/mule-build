@@ -40,8 +40,8 @@ export async function runSystemChecks(
     });
   }
 
-  // Check MULE_HOME (optional, only needed for run command)
-  const muleHomeResult = validateMuleHome();
+  // Check MULE_HOME (optional, only needed for run command) - project-aware
+  const muleHomeResult = validateMuleHome(cwd);
   const muleHomeValid = muleHomeResult.success;
 
   // Check pom.xml
@@ -103,8 +103,8 @@ export async function canRun(cwd: string = process.cwd()): Promise<Result<void>>
     return buildCheck;
   }
 
-  // Check MULE_HOME
-  const muleHomeResult = validateMuleHome();
+  // Check MULE_HOME (project-aware)
+  const muleHomeResult = validateMuleHome(cwd);
   if (!muleHomeResult.success) {
     return err(muleHomeResult.error ?? new Error('MULE_HOME is not configured'));
   }

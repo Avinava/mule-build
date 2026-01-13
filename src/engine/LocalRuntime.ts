@@ -4,119 +4,42 @@
  * Handles local Mule runtime interactions for development.
  */
 
-import { existsSync, copyFileSync, readdirSync } from 'fs';
+import { existsSync, copyFileSync } from 'fs';
 import { join, basename } from 'path';
-import { homedir } from 'os';
 import { Result, ok, err, RunResult } from '../types/index.js';
 import { exec } from '../utils/exec.js';
 import { logger } from '../utils/logger.js';
+import { resolveRuntime, RuntimeInfo } from './RuntimeResolver.js';
+
+// Re-export RuntimeInfo for consumers
+export { RuntimeInfo } from './RuntimeResolver.js';
 
 /**
- * Common paths where Mule runtime might be installed
- */
-function getCommonMulePaths(): string[] {
-  const home = homedir();
-  const paths: string[] = [];
-
-  // AnypointStudio runtimes in home directory (most common for developers)
-  const anypointStudioPath = join(home, 'AnypointStudio', 'runtimes');
-  if (existsSync(anypointStudioPath)) {
-    try {
-      const runtimes = readdirSync(anypointStudioPath)
-        .filter((name) => name.startsWith('mule-'))
-        .map((name) => join(anypointStudioPath, name))
-        .filter((p) => existsSync(join(p, 'bin', 'mule')));
-      // Sort to get latest version first
-      runtimes.sort().reverse();
-      paths.push(...runtimes);
-    } catch {
-      // Ignore read errors
-    }
-  }
-
-  // macOS: AnypointStudio.app embedded runtimes (in plugins directory)
-  const macosPluginsPath = '/Applications/AnypointStudio.app/Contents/Eclipse/plugins';
-  if (existsSync(macosPluginsPath)) {
-    try {
-      const plugins = readdirSync(macosPluginsPath)
-        .filter((name) => name.startsWith('org.mule.tooling.server.'))
-        .map((name) => join(macosPluginsPath, name, 'mule'))
-        .filter((p) => existsSync(join(p, 'bin', 'mule')));
-      // Sort to get latest version first
-      plugins.sort().reverse();
-      paths.push(...plugins);
-    } catch {
-      // Ignore read errors
-    }
-  }
-
-  // Other common installation paths
-  paths.push(
-    join(home, 'mule'),
-    join(home, '.mule'),
-    '/opt/mule',
-    '/usr/local/mule',
-    '/opt/mule-enterprise-standalone',
-    '/opt/mule-standalone'
-  );
-
-  return paths;
-}
-
-/**
- * Auto-detect Mule runtime installation
- */
-export function detectMuleHome(): string | undefined {
-  const commonPaths = getCommonMulePaths();
-
-  for (const path of commonPaths) {
-    if (existsSync(path) && existsSync(join(path, 'bin', 'mule'))) {
-      logger.info(`Auto-detected Mule runtime at: ${path}`);
-      return path;
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Get MULE_HOME from environment or auto-detect
+ * Get MULE_HOME from environment or auto-detect (legacy compatibility)
+ * @deprecated Use resolveRuntime() instead for project-aware detection
  */
 export function getMuleHome(): string | undefined {
-  // First check environment variable
-  const envMuleHome = process.env.MULE_HOME;
-  if (envMuleHome) {
-    return envMuleHome;
-  }
-
-  // Try auto-detection
-  return detectMuleHome();
+  const result = resolveRuntime();
+  return result.success ? result.data?.path : undefined;
 }
 
 /**
- * Validate MULE_HOME is set and valid
+ * Validate MULE_HOME is set and valid (legacy compatibility)
+ * @deprecated Use resolveRuntime() instead for project-aware detection
  */
-export function validateMuleHome(): Result<string> {
-  const muleHome = getMuleHome();
-
-  if (!muleHome) {
-    return err(
-      new Error(
-        'Mule runtime not found. Set MULE_HOME environment variable or install Mule in ~/AnypointStudio/runtimes/'
-      )
-    );
+export function validateMuleHome(projectPath?: string): Result<string> {
+  const result = resolveRuntime(projectPath);
+  if (!result.success) {
+    return err(result.error ?? new Error('Runtime resolution failed'));
   }
+  return ok(result.data!.path);
+}
 
-  if (!existsSync(muleHome)) {
-    return err(new Error(`MULE_HOME directory does not exist: ${muleHome}`));
-  }
-
-  const muleBin = join(muleHome, 'bin', 'mule');
-  if (!existsSync(muleBin)) {
-    return err(new Error(`Mule executable not found at: ${muleBin}`));
-  }
-
-  return ok(muleHome);
+/**
+ * Resolve runtime for a project (project-aware)
+ */
+export function resolveProjectRuntime(projectPath: string): Result<RuntimeInfo> {
+  return resolveRuntime(projectPath);
 }
 
 /**
@@ -148,10 +71,15 @@ export async function isPortInUse(port: number): Promise<boolean> {
 
 /**
  * Deploy a JAR to the local Mule runtime
+ * @param jarPath Path to the JAR file to deploy
+ * @param projectPath Optional project path for project-aware runtime detection
  */
-export async function deployToLocal(jarPath: string): Promise<Result<RunResult>> {
-  // Validate MULE_HOME
-  const muleHomeResult = validateMuleHome();
+export async function deployToLocal(
+  jarPath: string,
+  projectPath?: string
+): Promise<Result<RunResult>> {
+  // Resolve runtime (project-aware if projectPath provided)
+  const muleHomeResult = validateMuleHome(projectPath);
   if (!muleHomeResult.success || !muleHomeResult.data) {
     return err(muleHomeResult.error ?? new Error('Invalid MULE_HOME'));
   }

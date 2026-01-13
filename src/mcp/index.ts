@@ -11,7 +11,8 @@ import { stripSecure } from '../api/strip.js';
 import { BumpType } from '../types/index.js';
 import { loadConfig } from '../config/ConfigLoader.js';
 import { runSystemChecks } from '../config/SystemChecker.js';
-import { stopMuleRuntime, isPortInUse, validateMuleHome } from '../engine/LocalRuntime.js';
+import { stopMuleRuntime, isPortInUse } from '../engine/LocalRuntime.js';
+import { resolveRuntime, getAvailableRuntimes } from '../engine/RuntimeResolver.js';
 import { setMcpMode } from '../utils/logger.js';
 
 /**
@@ -368,15 +369,29 @@ export class MuleBuildMcpServer {
         try {
           const portToCheck = port ?? 8081;
           const portInUse = await isPortInUse(portToCheck);
-          const muleHomeResult = validateMuleHome();
+          const runtimeResult = resolveRuntime();
+          const available = getAvailableRuntimes();
 
           const statusParts: string[] = [];
 
-          // Check MULE_HOME
-          if (muleHomeResult.success) {
-            statusParts.push(`MULE_HOME: ${muleHomeResult.data}`);
+          // Check runtime
+          if (runtimeResult.success && runtimeResult.data) {
+            const rt = runtimeResult.data;
+            const sourceLabel =
+              rt.source === 'env'
+                ? 'MULE_HOME env var'
+                : rt.source === 'project'
+                  ? 'project .classpath'
+                  : 'auto-detected';
+            statusParts.push(`Runtime: ${rt.version} (${sourceLabel})`);
+            statusParts.push(`Path: ${rt.path}`);
           } else {
-            statusParts.push(`MULE_HOME: Not configured (${muleHomeResult.error?.message})`);
+            statusParts.push(`Runtime: Not found (${runtimeResult.error?.message})`);
+          }
+
+          // Show available runtimes
+          if (available.length > 0) {
+            statusParts.push(`Available: ${available.map((r) => r.version).join(', ')}`);
           }
 
           // Check port

@@ -12,6 +12,7 @@ import { BumpType } from '../types/index.js';
 import { loadConfig } from '../config/ConfigLoader.js';
 import { runSystemChecks } from '../config/SystemChecker.js';
 import { stopMuleRuntime, isPortInUse, validateMuleHome } from '../engine/LocalRuntime.js';
+import { setMcpMode } from '../utils/logger.js';
 
 /**
  * Mule Build MCP Server
@@ -810,6 +811,9 @@ This workflow converts production-encrypted properties to plain text values so I
   }
 
   public async start() {
+    // Enable MCP mode to route all logs to stderr (stdout is for JSON-RPC)
+    setMcpMode(true);
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Mule Build MCP Server running on stdio');

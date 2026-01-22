@@ -1,5 +1,6 @@
-import { spawn, SpawnOptions } from 'child_process';
+import { spawn, SpawnOptions, StdioOptions } from 'child_process';
 import { Result, ok, err } from '../types/index.js';
+import { isMcpMode } from './logger.js';
 
 export interface ExecResult {
   stdout: string;
@@ -50,6 +51,7 @@ export async function exec(
 
 /**
  * Execute a command and stream output to console
+ * In MCP mode, output is redirected to stderr to avoid corrupting JSON-RPC on stdout
  */
 export async function execWithOutput(
   command: string,
@@ -57,11 +59,25 @@ export async function execWithOutput(
   options: SpawnOptions = {}
 ): Promise<Result<number>> {
   return new Promise((resolve) => {
+    // In MCP mode, capture output and stream to stderr to avoid corrupting JSON-RPC
+    const mcpMode = isMcpMode();
+    const stdio: StdioOptions = mcpMode ? ['ignore', 'pipe', 'pipe'] : 'inherit';
+
     const proc = spawn(command, args, {
       ...options,
-      stdio: 'inherit',
+      stdio,
       shell: true,
     });
+
+    // In MCP mode, pipe output to stderr
+    if (mcpMode) {
+      proc.stdout?.on('data', (data) => {
+        process.stderr.write(data);
+      });
+      proc.stderr?.on('data', (data) => {
+        process.stderr.write(data);
+      });
+    }
 
     proc.on('error', (error) => {
       resolve(err(new Error(`Failed to execute ${command}: ${error.message}`)));

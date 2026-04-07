@@ -1,11 +1,28 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Mule-Build" width="800" />
+  <img src="assets/logo.svg" alt="Mule-Build" width="600" />
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/v/@sfdxy/mule-build.svg" alt="npm version" /></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/v/@sfdxy/mule-build?style=flat-square&color=f97316" alt="npm version" /></a>
+  <a href="https://github.com/Avinava/mule-build/actions"><img src="https://img.shields.io/github/actions/workflow/status/Avinava/mule-build/ci.yml?style=flat-square&color=38bdf8" alt="CI" /></a>
+  <a href="https://github.com/Avinava/mule-build/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
+  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/dm/@sfdxy/mule-build?style=flat-square&color=fbbf24" alt="Downloads" /></a>
 </p>
+
+<p align="center">
+  <strong>A type-safe CLI and library for MuleSoft application build automation.</strong>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#cli-commands">CLI Commands</a> •
+  <a href="#programmatic-api">API</a> •
+  <a href="#ai-agent-integration-mcp">MCP / AI</a>
+</p>
+
+---
 
 ## Features
 

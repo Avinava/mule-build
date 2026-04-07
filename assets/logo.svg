@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="100%" height="auto">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#facc15" />
+    </linearGradient>
+    <linearGradient id="hammerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#ef4444" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="240" rx="24" fill="url(#bg)" filter="url(#shadow)" />
+
+  <!-- Terminal Window Decoration -->
+  <circle cx="40" cy="40" r="6" fill="#ef4444" />
+  <circle cx="64" cy="40" r="6" fill="#eab308" />
+  <circle cx="88" cy="40" r="6" fill="#22c55e" />
+
+  <!-- Icon: Terminal with Hammer -->
+  <g transform="translate(70, 70)">
+    <!-- Main terminal box -->
+    <rect width="100" height="100" rx="24" fill="#0f172a" stroke="url(#textGrad)" stroke-width="4" filter="url(#shadow)" />
+
+    <!-- Terminal prompt chevron -->
+    <path d="M 25 35 L 43 50 L 25 65" fill="none" stroke="#22c55e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Hammer inside the terminal -->
+    <g transform="translate(68, 65) rotate(-25)">
+      <!-- Handle -->
+      <rect x="-4" y="-12" width="8" height="34" rx="4" fill="#94a3b8" />
+      <!-- Head -->
+      <rect x="-18" y="-22" width="36" height="16" rx="4" fill="url(#hammerGrad)" filter="url(#shadow)" />
+      <!-- Side detail on head -->
+      <rect x="-10" y="-18" width="10" height="4" rx="2" fill="#0f172a" opacity="0.3" />
+    </g>
+
+    <!-- Small build sparks -->
+    <circle cx="48" cy="30" r="3" fill="#facc15" />
+    <circle cx="60" cy="18" r="2" fill="#38bdf8" />
+  </g>
+
+  <!-- Typography -->
+  <g transform="translate(220, 130)">
+    <text x="0" y="0" font-family="system-ui, -apple-system, sans-serif" font-size="64" font-weight="800" letter-spacing="-1.5">
+      <tspan fill="#f8fafc">Mule</tspan>
+      <tspan fill="url(#textGrad)">Build</tspan>
+    </text>
+    <text x="0" y="45" fill="#94a3b8" font-family="monospace" font-size="20" letter-spacing="-0.5">Type-safe MuleSoft build automation</text>
+  </g>
+</svg>

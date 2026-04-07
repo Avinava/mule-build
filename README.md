@@ -1,9 +1,11 @@
-# Mule-Build
+<p align="center">
+  <img src="assets/logo.svg" alt="Mule-Build" width="800" />
+</p>
 
-A type-safe CLI and library for MuleSoft application build automation.
-
-[![npm version](https://img.shields.io/npm/v/@sfdxy/mule-build.svg)](https://www.npmjs.com/package/@sfdxy/mule-build)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/v/@sfdxy/mule-build.svg" alt="npm version" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+</p>
 
 ## Features
 

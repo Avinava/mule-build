@@ -13,7 +13,59 @@ import { loadConfig } from '../config/ConfigLoader.js';
 import { runSystemChecks } from '../config/SystemChecker.js';
 import { stopMuleRuntime, isPortInUse } from '../engine/LocalRuntime.js';
 import { resolveRuntime, getAvailableRuntimes } from '../engine/RuntimeResolver.js';
+import { BuildError } from '../engine/MavenBuilder.js';
 import { setMcpMode } from '../utils/logger.js';
+
+function formatBuildError(error: Error | undefined): string {
+  if (!error) return 'Build failed: unknown error';
+
+  if (error instanceof BuildError) {
+    const { diagnostic } = error;
+    const parts: string[] = [];
+
+    parts.push(`Build failed: ${diagnostic.summary}`);
+    parts.push('');
+    parts.push(`Category: ${diagnostic.category}`);
+
+    if (diagnostic.relevantLines.length > 0) {
+      parts.push('');
+      parts.push('--- Relevant Output ---');
+      parts.push(...diagnostic.relevantLines);
+    }
+
+    if (diagnostic.suggestions.length > 0) {
+      parts.push('');
+      parts.push('--- Suggestions ---');
+      parts.push(...diagnostic.suggestions.map((s) => `• ${s}`));
+    }
+
+    return parts.join('\n');
+  }
+
+  return `Build failed: ${error.message}`;
+}
+
+function formatBuildSuccess(jarPath: string, metrics?: import('../types/index.js').BuildMetrics): string {
+  const parts: string[] = [];
+  parts.push(`Build successful!`);
+  parts.push(`Jar Path: ${jarPath}`);
+
+  if (metrics) {
+    if (metrics.durationMs) {
+      const seconds = Math.round(metrics.durationMs / 1000);
+      parts.push(`Duration: ${seconds}s`);
+    }
+    if (metrics.testsRun !== undefined) {
+      const passed = metrics.testsRun - (metrics.testsFailed ?? 0) - (metrics.testsSkipped ?? 0);
+      parts.push(`Tests: ${metrics.testsRun} run, ${passed} passed${metrics.testsFailed ? `, ${metrics.testsFailed} failed` : ''}${metrics.testsSkipped ? `, ${metrics.testsSkipped} skipped` : ''}`);
+    }
+    if (metrics.warningCount && metrics.warningCount > 0) {
+      parts.push(`Warnings: ${metrics.warningCount}`);
+    }
+  }
+
+  return parts.join('\n');
+}
 
 /**
  * Mule Build MCP Server
@@ -39,7 +91,7 @@ export class MuleBuildMcpServer {
       'run_build',
       {
         description:
-          'Compile and package a MuleSoft application into a deployable JAR. Use this when you need to build for deployment to CloudHub, Runtime Fabric, or standalone Mule. Automatically handles environment-specific security requirements—choose "production" to enforce secure properties or "stripSecure" for hassle-free local development.',
+          'ONLY for MuleSoft Mule 4 projects (identified by pom.xml with mule-maven-plugin and src/main/mule/ XML configs). Do NOT use for JavaScript, Node.js, Python, or any non-Mule project. Compiles and packages a Mule application into a deployable JAR using Maven. Use this when you need to build for deployment to CloudHub, Runtime Fabric, or standalone Mule runtime. Automatically handles environment-specific security requirements—choose "production" to enforce secure:: property prefixes or "stripSecure" for hassle-free local development.',
         inputSchema: {
           cwd: z
             .string()
@@ -83,7 +135,7 @@ export class MuleBuildMcpServer {
               content: [
                 {
                   type: 'text',
-                  text: `Build failed: ${result.error?.message}`,
+                  text: formatBuildError(result.error),
                 },
               ],
               isError: true,
@@ -94,11 +146,17 @@ export class MuleBuildMcpServer {
             content: [
               {
                 type: 'text',
-                text: `Build successful!\nJar Path: ${result.data?.jarPath}`,
+                text: formatBuildSuccess(result.data!.jarPath, result.data?.metrics),
               },
             ],
           };
         } catch (error) {
+          if (error instanceof BuildError) {
+            return {
+              content: [{ type: 'text', text: formatBuildError(error) }],
+              isError: true,
+            };
+          }
           return {
             content: [
               {
@@ -117,7 +175,7 @@ export class MuleBuildMcpServer {
       'release_version',
       {
         description:
-          'Automate your release workflow: bump the version in pom.xml, create a git tag, and push—all in one step. Use this instead of manually editing versions and running multiple git commands. Perfect for CI/CD pipelines or when you want consistent, error-free releases.',
+          'ONLY for MuleSoft Mule 4 projects (identified by pom.xml with mule-maven-plugin). Do NOT use for JavaScript, Node.js, Python, or any non-Mule project. Bumps the version in pom.xml using Maven-style semver, creates a git tag, and pushes—all in one step. Use this instead of manually editing pom.xml versions and running multiple git commands. Not a substitute for npm version, cargo release, or other ecosystem-specific release tools.',
         inputSchema: {
           cwd: z
             .string()
@@ -189,7 +247,7 @@ export class MuleBuildMcpServer {
       'enforce_security',
       {
         description:
-          "Prevent credential leaks by scanning your Mule configs for exposed passwords, API keys, and secrets. Run this before commits or deployments to catch properties that should have the secure:: prefix but don't. Essential for security compliance and protecting production credentials.",
+          "ONLY for MuleSoft Mule 4 projects. Scans Mule XML config files (src/main/mule/*.xml) for exposed passwords, API keys, and secrets that should use the Mule secure:: property prefix. Do NOT use for JavaScript, Node.js, or non-Mule projects—this tool specifically checks Mule XML property placeholders, not .env files or other config formats. Run before commits or deployments to catch unsecured credentials.",
         inputSchema: {
           cwd: z
             .string()
@@ -218,15 +276,30 @@ export class MuleBuildMcpServer {
 
           if (checkResult.data?.valid) {
             return {
-              content: [{ type: 'text', text: 'All sensitive properties are properly secured.' }],
+              content: [
+                {
+                  type: 'text',
+                  text: `All sensitive properties are properly secured.\nFiles checked: ${checkResult.data.filesChecked.length}`,
+                },
+              ],
             };
           } else {
-            const violations = checkResult.data?.violations
-              .map((v) => `${v.file}: Line ${v.line} - ${v.value}`)
-              .join('\n');
+            const violations = checkResult.data?.violations ?? [];
+            const parts: string[] = [];
+            parts.push(`Found ${violations.length} unsecured sensitive propert${violations.length === 1 ? 'y' : 'ies'}:`);
+            parts.push('');
+            for (const v of violations) {
+              parts.push(`• ${v.file}:${v.line} — ${v.value}`);
+              parts.push(`  Fix: ${v.suggestion}`);
+            }
+            parts.push('');
+            parts.push('--- How to fix ---');
+            parts.push('Replace plain property references with secure:: prefixed versions.');
+            parts.push('Example: ${db.password} → ${secure::db.password}');
+            parts.push('Or use strip_secure tool for local development without secure properties.');
 
             return {
-              content: [{ type: 'text', text: `Found unsecured properties:\n${violations}` }],
+              content: [{ type: 'text', text: parts.join('\n') }],
             };
           }
         } catch (error) {
@@ -248,7 +321,7 @@ export class MuleBuildMcpServer {
       'run_app',
       {
         description:
-          'Build and instantly run your MuleSoft app locally for rapid development and testing. Deploys to your local Mule runtime (MULE_HOME) so you can test flows, debug with breakpoints, and iterate quickly without deploying to CloudHub. Supports hot reload—make changes and see them immediately.',
+          'ONLY for MuleSoft Mule 4 projects. Do NOT use for JavaScript, Node.js, Python, or any non-Mule project. Builds and deploys a Mule application to your local Mule runtime (MULE_HOME) for rapid development and testing. This is NOT "npm run dev" or a generic dev server—it compiles Mule XML flows via Maven and deploys to a local Mule 4 runtime. Supports hot reload and remote debugging on port 5005.',
         inputSchema: {
           cwd: z
             .string()
@@ -280,7 +353,7 @@ export class MuleBuildMcpServer {
               content: [
                 {
                   type: 'text',
-                  text: `Run failed: ${result.error?.message}`,
+                  text: formatBuildError(result.error),
                 },
               ],
               isError: true,
@@ -296,6 +369,12 @@ export class MuleBuildMcpServer {
             ],
           };
         } catch (error) {
+          if (error instanceof BuildError) {
+            return {
+              content: [{ type: 'text', text: formatBuildError(error) }],
+              isError: true,
+            };
+          }
           return {
             content: [
               {
@@ -314,7 +393,7 @@ export class MuleBuildMcpServer {
       'stop_app',
       {
         description:
-          "Gracefully shut down the locally running Mule application. Use this when you're done testing, need to free up port 8081, or want to restart with fresh configuration. Cleaner than killing the process manually.",
+          "ONLY for MuleSoft Mule 4 projects. Gracefully shuts down the locally running Mule runtime (not a Node.js/Python/generic process). Use this when you're done testing Mule flows, need to free up port 8081, or want to restart with fresh Mule configuration.",
         inputSchema: {},
       },
       async () => {
@@ -360,7 +439,7 @@ export class MuleBuildMcpServer {
       'check_app_status',
       {
         description:
-          'Quickly diagnose your local Mule environment: Is the runtime running? Is port 8081 in use? Is MULE_HOME configured correctly? Use this to troubleshoot "port already in use" errors or verify your app is actually running before testing.',
+          'ONLY for MuleSoft Mule 4 environments. Checks whether the local Mule runtime is running, whether port 8081 is in use, and whether MULE_HOME points to a valid Mule 4 installation. Do NOT use to check Node.js, Python, or other non-Mule processes. Use this to troubleshoot Mule-specific "port already in use" errors or verify a Mule app is running before testing.',
         inputSchema: {
           port: z.number().optional().describe('Port to check (default: 8081)'),
         },
@@ -428,7 +507,7 @@ export class MuleBuildMcpServer {
       'strip_secure',
       {
         description:
-          'Make your Mule configs work locally by removing secure:: prefixes that require the production Secure Properties module. Instead of manually editing XML files for local testing, run this once to convert all encrypted property references to plain text. Always use --dry-run first to preview changes.',
+          'ONLY for MuleSoft Mule 4 projects. Removes secure:: prefixes from Mule XML config files (src/main/mule/*.xml) that require the production Mule Secure Properties module. This is a Mule-specific operation—do NOT use for .env files, JavaScript configs, or non-Mule projects. Converts encrypted property references like ${secure::db.password} to ${db.password} for local testing. Always use dryRun=true first to preview changes.',
         inputSchema: {
           cwd: z
             .string()
@@ -491,7 +570,7 @@ export class MuleBuildMcpServer {
       'system_check',
       {
         description:
-          'Diagnose environment issues before they break your build. Validates that Maven is installed, MULE_HOME points to a valid runtime, pom.xml exists, and the standard Mule project structure is in place. Run this first when setting up a new machine or troubleshooting build failures.',
+          'ONLY for MuleSoft Mule 4 development environments. Validates that Maven is installed, MULE_HOME points to a valid Mule 4 runtime, pom.xml exists with mule-maven-plugin, and the standard Mule project structure (src/main/mule/) is in place. Do NOT use for Node.js, Python, or non-Mule projects. Run this first when setting up a MuleSoft development machine or troubleshooting Mule build failures.',
         inputSchema: {
           cwd: z
             .string()
@@ -506,33 +585,40 @@ export class MuleBuildMcpServer {
           const workDir = cwd ?? process.cwd();
           const result = await runSystemChecks(workDir);
 
-          if (!result.success) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `System check failed: ${result.error?.message}`,
-                },
-              ],
-              isError: true,
-            };
+          const checks = result.data ?? {
+            maven: false,
+            muleHome: false,
+            pomXml: false,
+            muleSourceDir: false,
+            details: [],
+          };
+
+          const statusLines: string[] = ['System Check Results:'];
+          const remediations: string[] = [];
+
+          for (const detail of checks.details) {
+            statusLines.push(`${detail.passed ? '✓' : '✗'} ${detail.message}`);
+            if (!detail.passed && detail.remediation) {
+              remediations.push(`• ${detail.remediation}`);
+            }
           }
 
-          const checks = result.data!;
-          const statusLines = [
-            `Maven: ${checks.maven ? '✓ Installed' : '✗ Not found'}`,
-            `MULE_HOME: ${checks.muleHome ? '✓ Configured' : '✗ Not set (needed for run command)'}`,
-            `pom.xml: ${checks.pomXml ? '✓ Found' : '✗ Not found'}`,
-            `src/main/mule: ${checks.muleSourceDir ? '✓ Found' : '✗ Not found'}`,
-          ];
+          if (remediations.length > 0) {
+            statusLines.push('');
+            statusLines.push('--- How to fix ---');
+            statusLines.push(...remediations);
+          }
+
+          const allPassed = checks.maven && checks.pomXml && checks.muleSourceDir;
 
           return {
             content: [
               {
                 type: 'text',
-                text: `System Check Results:\n${statusLines.join('\n')}`,
+                text: statusLines.join('\n'),
               },
             ],
+            ...(allPassed ? {} : { isError: true }),
           };
         } catch (error) {
           return {

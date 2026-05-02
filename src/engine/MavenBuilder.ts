@@ -6,9 +6,26 @@
 
 import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { Result, ok, err, BuildEnvironment } from '../types/index.js';
+import { Result, ok, err, BuildEnvironment, BuildMetrics } from '../types/index.js';
 import { exec, execWithOutput, commandExists } from '../utils/exec.js';
 import { logger } from '../utils/logger.js';
+import { parseMavenFailure, parseMavenSuccess, MavenDiagnostic } from './MavenOutputParser.js';
+
+export class BuildError extends Error {
+  diagnostic: MavenDiagnostic;
+  rawOutput: string;
+
+  constructor(message: string, diagnostic: MavenDiagnostic, rawOutput: string) {
+    super(message);
+    this.name = 'BuildError';
+    this.diagnostic = diagnostic;
+    this.rawOutput = rawOutput;
+  }
+}
+
+export interface BuildResult {
+  metrics: BuildMetrics;
+}
 
 export interface MavenBuildOptions {
   /** Maven profile to use */
@@ -103,7 +120,7 @@ export async function mavenClean(cwd: string = process.cwd()): Promise<Result<vo
 /**
  * Run Maven build with output to console
  */
-export async function mavenBuild(options: MavenBuildOptions = {}): Promise<Result<void>> {
+export async function mavenBuild(options: MavenBuildOptions = {}): Promise<Result<BuildResult>> {
   const cwd = options.cwd ?? process.cwd();
   const args = generateMavenArgs(options);
 
@@ -111,15 +128,25 @@ export async function mavenBuild(options: MavenBuildOptions = {}): Promise<Resul
 
   const result = await execWithOutput('mvn', args, { cwd });
 
-  if (!result.success) {
+  if (!result.success || !result.data) {
     return err(result.error ?? new Error('Maven build failed'));
   }
 
-  if (result.data !== 0) {
-    return err(new Error(`Maven build failed with exit code ${result.data}`));
+  const { exitCode, output, durationMs } = result.data;
+
+  if (exitCode !== 0) {
+    const diagnostic = parseMavenFailure(output);
+    return err(
+      new BuildError(
+        `Maven build failed: ${diagnostic.summary}`,
+        diagnostic,
+        output
+      )
+    );
   }
 
-  return ok(undefined);
+  const metrics = parseMavenSuccess(output, durationMs);
+  return ok({ metrics });
 }
 
 /**

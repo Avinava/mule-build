@@ -11,11 +11,18 @@ import { isMavenInstalled } from '../engine/MavenBuilder.js';
 import { validateMuleHome } from '../engine/LocalRuntime.js';
 import { pomExists } from '../engine/PomParser.js';
 
+export interface SystemCheckDetail {
+  passed: boolean;
+  message: string;
+  remediation?: string;
+}
+
 export interface SystemCheckResult {
   maven: boolean;
   muleHome: boolean;
   pomXml: boolean;
   muleSourceDir: boolean;
+  details: SystemCheckDetail[];
 }
 
 export interface SystemCheckError {
@@ -63,11 +70,43 @@ export async function runSystemChecks(
     });
   }
 
+  const details: SystemCheckDetail[] = [
+    {
+      passed: mavenInstalled,
+      message: mavenInstalled ? 'Maven installed' : 'Maven is not installed or not in PATH',
+      remediation: mavenInstalled
+        ? undefined
+        : 'Install Maven: `brew install maven` (macOS) or download from https://maven.apache.org/download.cgi. Ensure `mvn` is on your PATH.',
+    },
+    {
+      passed: muleHomeValid,
+      message: muleHomeValid ? 'MULE_HOME configured' : 'MULE_HOME not set or invalid',
+      remediation: muleHomeValid
+        ? undefined
+        : 'Set MULE_HOME to your Mule runtime installation, e.g. `export MULE_HOME=/opt/mule-enterprise-standalone-4.6.0`. Or install AnypointStudio which includes a bundled runtime.',
+    },
+    {
+      passed: pomValid,
+      message: pomValid ? 'pom.xml found' : 'pom.xml not found in current directory',
+      remediation: pomValid
+        ? undefined
+        : 'Ensure you are in the root directory of a MuleSoft project. The pom.xml should contain mule-maven-plugin.',
+    },
+    {
+      passed: muleSourceExists,
+      message: muleSourceExists ? 'src/main/mule found' : 'src/main/mule directory not found',
+      remediation: muleSourceExists
+        ? undefined
+        : 'Create the Mule source directory: `mkdir -p src/main/mule` and add your Mule XML flow files there.',
+    },
+  ];
+
   const result: SystemCheckResult = {
     maven: mavenInstalled,
     muleHome: muleHomeValid,
     pomXml: pomValid,
     muleSourceDir: muleSourceExists,
+    details,
   };
 
   if (errors.length > 0) {

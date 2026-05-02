@@ -62,6 +62,8 @@ export interface PackageResult {
   jarPath: string;
   /** Deployment information */
   deploymentInfo: DeploymentInfo;
+  /** Build metrics (duration, tests, warnings) */
+  metrics?: BuildMetrics;
 }
 
 /**
@@ -230,6 +232,17 @@ export interface ProfileConfig {
   secureProperties?: ProcessMode;
   includeSource?: boolean;
   enforceGitClean?: boolean;
+}
+
+/**
+ * Build metrics extracted from Maven output
+ */
+export interface BuildMetrics {
+  durationMs?: number;
+  testsRun?: number;
+  testsFailed?: number;
+  testsSkipped?: number;
+  warningCount?: number;
 }
 
 /**

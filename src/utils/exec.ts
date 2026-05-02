@@ -8,6 +8,14 @@ export interface ExecResult {
   exitCode: number;
 }
 
+export interface ExecOutput {
+  exitCode: number;
+  output: string;
+  durationMs: number;
+}
+
+const MAX_BUFFER_LINES = 500;
+
 /**
  * Execute a command and return the result
  */
@@ -50,18 +58,20 @@ export async function exec(
 }
 
 /**
- * Execute a command and stream output to console
- * In MCP mode, output is redirected to stderr to avoid corrupting JSON-RPC on stdout
+ * Execute a command, stream output to console, and capture it in a ring buffer.
+ * In MCP mode, output is redirected to stderr to avoid corrupting JSON-RPC on stdout.
+ * Returns both the exit code and the captured output (last 500 lines).
  */
 export async function execWithOutput(
   command: string,
   args: string[],
   options: SpawnOptions = {}
-): Promise<Result<number>> {
+): Promise<Result<ExecOutput>> {
   return new Promise((resolve) => {
-    // In MCP mode, capture output and stream to stderr to avoid corrupting JSON-RPC
+    const startTime = Date.now();
     const mcpMode = isMcpMode();
-    const stdio: StdioOptions = mcpMode ? ['ignore', 'pipe', 'pipe'] : 'inherit';
+    const stdio: StdioOptions = ['ignore', 'pipe', 'pipe'];
+    const buffer: string[] = [];
 
     const proc = spawn(command, args, {
       ...options,
@@ -69,22 +79,44 @@ export async function execWithOutput(
       shell: true,
     });
 
-    // In MCP mode, pipe output to stderr
-    if (mcpMode) {
-      proc.stdout?.on('data', (data) => {
+    const appendToBuffer = (data: Buffer) => {
+      const lines = data.toString().split('\n');
+      for (const line of lines) {
+        if (line) {
+          buffer.push(line);
+          if (buffer.length > MAX_BUFFER_LINES) {
+            buffer.shift();
+          }
+        }
+      }
+    };
+
+    proc.stdout?.on('data', (data) => {
+      appendToBuffer(data);
+      if (mcpMode) {
         process.stderr.write(data);
-      });
-      proc.stderr?.on('data', (data) => {
-        process.stderr.write(data);
-      });
-    }
+      } else {
+        process.stdout.write(data);
+      }
+    });
+
+    proc.stderr?.on('data', (data) => {
+      appendToBuffer(data);
+      process.stderr.write(data);
+    });
 
     proc.on('error', (error) => {
       resolve(err(new Error(`Failed to execute ${command}: ${error.message}`)));
     });
 
     proc.on('close', (code) => {
-      resolve(ok(code ?? 0));
+      resolve(
+        ok({
+          exitCode: code ?? 0,
+          output: buffer.join('\n'),
+          durationMs: Date.now() - startTime,
+        })
+      );
     });
   });
 }

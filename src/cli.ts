@@ -13,6 +13,7 @@ import { stripSecure } from './api/strip.js';
 import { enforceSecure } from './api/enforce.js';
 import { setLogLevel } from './utils/logger.js';
 import { BumpType } from './types/index.js';
+import { BuildError } from './engine/MavenBuilder.js';
 
 // Package info
 const VERSION = '1.0.0';
@@ -72,6 +73,21 @@ export function createProgram(): Command {
 
       if (!result.success) {
         console.error(chalk.red(`Build failed: ${result.error?.message}`));
+        if (result.error instanceof BuildError) {
+          const { diagnostic } = result.error;
+          if (diagnostic.relevantLines.length > 0) {
+            console.error(chalk.dim('\nRelevant output:'));
+            for (const line of diagnostic.relevantLines.slice(0, 15)) {
+              console.error(chalk.dim(`  ${line}`));
+            }
+          }
+          if (diagnostic.suggestions.length > 0) {
+            console.error(chalk.yellow('\nSuggestions:'));
+            for (const s of diagnostic.suggestions.slice(0, 3)) {
+              console.error(chalk.yellow(`  • ${s}`));
+            }
+          }
+        }
         process.exit(1);
       }
 
@@ -96,6 +112,15 @@ export function createProgram(): Command {
 
       if (!result.success) {
         console.error(chalk.red(`Run failed: ${result.error?.message}`));
+        if (result.error instanceof BuildError) {
+          const { diagnostic } = result.error;
+          if (diagnostic.suggestions.length > 0) {
+            console.error(chalk.yellow('\nSuggestions:'));
+            for (const s of diagnostic.suggestions.slice(0, 3)) {
+              console.error(chalk.yellow(`  • ${s}`));
+            }
+          }
+        }
         process.exit(1);
       }
 

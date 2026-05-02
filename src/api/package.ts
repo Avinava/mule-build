@@ -289,6 +289,7 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     return ok({
       jarPath: finalJarPath,
       deploymentInfo,
+      metrics: buildResult.data?.metrics,
     });
   } finally {
     // Restore pom.xml

@@ -27,6 +27,7 @@ export type {
   EnforceResult,
   DeploymentInfo,
   BuildEnvironment,
+  BuildMetrics,
   BumpType,
   MuleBuildConfig,
   ProfileConfig,
@@ -36,6 +37,8 @@ export type {
 // Utility exports for advanced usage
 export { ok, err } from './types/index.js';
 export { logger, setLogLevel } from './utils/logger.js';
+export { BuildError } from './engine/MavenBuilder.js';
+export type { MavenDiagnostic, FailureCategory } from './engine/MavenOutputParser.js';
 
 // CLI (for programmatic CLI invocation)
 export { createProgram, run as runCli } from './cli.js';

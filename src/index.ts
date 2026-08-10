@@ -11,7 +11,11 @@ export {
   releaseVersion,
   stripSecure,
   enforceSecure,
+  systemCheck,
+  getRuntimeStatus,
+  stopRuntime,
 } from './api/index.js';
+export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from './api/index.js';
 
 // Types
 export type {
@@ -26,11 +30,17 @@ export type {
   EnforceOptions,
   EnforceResult,
   DeploymentInfo,
+  BuildProfile,
   BuildEnvironment,
   BuildMetrics,
   BumpType,
   MuleBuildConfig,
   ProfileConfig,
+  RuntimeConfig,
+  ResolvedRuntime,
+  RuntimeStatus,
+  RuntimeStatusOptions,
+  StopRuntimeOptions,
   Result,
 } from './types/index.js';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
@@ -104,6 +104,14 @@ describe('XmlProcessor Backup/Restore', () => {
       const result = removeSecurePropertiesConfig(content);
 
       expect(result).toBe(content);
+    });
+
+    it('should remove a self-closing secure properties config', () => {
+      const content =
+        '<mule><secure-properties:config name="secure" file="secure.yaml"/><flow/></mule>';
+      const result = removeSecurePropertiesConfig(content);
+
+      expect(result).toBe('<mule><flow/></mule>');
     });
   });
 

@@ -9,8 +9,16 @@ import { Result, ok, err, ReleaseOptions, ReleaseResult } from '../types/index.j
 import { canBuild } from '../config/SystemChecker.js';
 import { packageProject } from './package.js';
 import { getVersion, setVersion } from '../engine/PomParser.js';
-import { isGitRepo, isWorkingTreeClean, commit, createTag, pushWithTags } from '../utils/git.js';
+import { isGitRepo, isWorkingTreeClean, commit, createTag, pushRelease } from '../utils/git.js';
 import { logger } from '../utils/logger.js';
+import { exec } from '../utils/exec.js';
+
+async function restorePomVersion(version: string, cwd: string): Promise<void> {
+  setVersion(version, cwd);
+  // commit() stages only pom.xml. Re-stage the restored HEAD content so a failed
+  // commit does not leave the release version in the index.
+  await exec('git', ['add', '--', 'pom.xml'], { cwd });
+}
 
 /**
  * Bump version and create a release
@@ -52,6 +60,16 @@ export async function releaseVersion(options: ReleaseOptions): Promise<Result<Re
     return err(new Error(`Invalid version: ${currentVersion}`));
   }
 
+  if (options.dryRun) {
+    return ok({
+      previousVersion: currentVersion,
+      newVersion,
+      tagName: shouldTag ? `v${newVersion}` : undefined,
+      pushed: false,
+      dryRun: true,
+    });
+  }
+
   logger.info(`Bumping version: ${currentVersion} → ${newVersion}`);
 
   // Update pom.xml
@@ -67,12 +85,14 @@ export async function releaseVersion(options: ReleaseOptions): Promise<Result<Re
   const packageResult = await packageProject({
     environment: 'production',
     version: newVersion,
+    // The release entry point verified cleanliness before changing pom.xml.
+    enforceGitClean: false,
     cwd,
   });
 
   if (!packageResult.success) {
     // Rollback version change
-    setVersion(currentVersion, cwd);
+    await restorePomVersion(currentVersion, cwd);
     return err(packageResult.error ?? new Error('Production build failed'));
   }
 
@@ -81,6 +101,7 @@ export async function releaseVersion(options: ReleaseOptions): Promise<Result<Re
   const commitMessage = `Release v${newVersion}`;
   const commitResult = await commit(commitMessage, cwd);
   if (!commitResult.success) {
+    await restorePomVersion(currentVersion, cwd);
     return err(commitResult.error ?? new Error('Failed to commit changes'));
   }
 
@@ -91,7 +112,11 @@ export async function releaseVersion(options: ReleaseOptions): Promise<Result<Re
     logger.step(`Creating tag: ${tagName}...`);
     const tagResult = await createTag(tagName, `Release ${newVersion}`, cwd);
     if (!tagResult.success) {
-      return err(tagResult.error ?? new Error('Failed to create tag'));
+      return err(
+        new Error(
+          `Version commit was created, but tag ${tagName} failed: ${tagResult.error?.message}. Create the tag manually or revert the release commit.`
+        )
+      );
     }
   }
 
@@ -99,12 +124,15 @@ export async function releaseVersion(options: ReleaseOptions): Promise<Result<Re
   let pushed = false;
   if (shouldPush) {
     logger.step('Pushing to remote...');
-    const pushResult = await pushWithTags(cwd);
+    const pushResult = await pushRelease(tagName, cwd);
     if (!pushResult.success) {
-      logger.warn(`Push failed: ${pushResult.error?.message}. You can push manually.`);
-    } else {
-      pushed = true;
+      return err(
+        new Error(
+          `Release exists locally but push failed: ${pushResult.error?.message}. Push the branch${tagName ? ` and ${tagName}` : ''} manually.`
+        )
+      );
     }
+    pushed = true;
   }
 
   logger.success(`Released version ${newVersion}`);

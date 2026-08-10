@@ -25,11 +25,11 @@ const PATTERNS = {
   // Matches ${secure::property.name} format
   securePropertyBraces: /\$\{secure::([^}]+)\}/g,
   // Matches Mule::p('secure::property.name') DataWeave format
-  securePropertyDataWeave: /Mule::p\('secure::([^']+)'\)/g,
+  securePropertyDataWeave: /Mule::p\((['"])secure::(.+?)\1\)/g,
   // Matches any ${...} property reference
   anyProperty: /\$\{([^}]+)\}/g,
   // Matches Mule::p('...') DataWeave property reference
-  anyDataWeaveProperty: /Mule::p\('([^']+)'\)/g,
+  anyDataWeaveProperty: /Mule::p\((['"])(.+?)\1\)/g,
 };
 
 /**
@@ -64,9 +64,9 @@ export function stripSecureFromContent(content: string): { result: string; count
   });
 
   // Replace Mule::p('secure::prop') -> Mule::p('prop')
-  result = result.replace(PATTERNS.securePropertyDataWeave, (_match, prop) => {
+  result = result.replace(PATTERNS.securePropertyDataWeave, (_match, quote, prop) => {
     count++;
-    return `Mule::p('${prop}')`;
+    return `Mule::p(${quote}${prop}${quote})`;
   });
 
   return { result, count };
@@ -82,7 +82,10 @@ export function findUnsecuredProperties(
   const violations: { property: string; line: number; value: string }[] = [];
   const lines = content.split('\n');
 
-  const sensitiveRegex = new RegExp(sensitivePatterns.join('|'), 'i');
+  const sensitiveRegex = new RegExp(
+    sensitivePatterns.map((pattern) => pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+    'i'
+  );
 
   lines.forEach((line, index) => {
     // Check ${prop} format (not already secured)
@@ -108,7 +111,7 @@ export function findUnsecuredProperties(
     const dwMatches = line.matchAll(PATTERNS.anyDataWeaveProperty);
     for (const match of dwMatches) {
       const fullMatch = match[0];
-      const propName = match[1];
+      const propName = match[2];
 
       // Skip if already secured
       if (propName.startsWith('secure::')) continue;
@@ -254,9 +257,7 @@ export async function enforceSecure(
  * Uses regex to preserve formatting
  */
 export function removeSecurePropertiesConfig(content: string): string {
-  // Remove the entire <secure-properties:config>...</secure-properties:config> block
-  return content.replace(
-    /<secure-properties:config[^>]*>[\s\S]*?<\/secure-properties:config>/gm,
-    ''
-  );
+  return content
+    .replace(/<secure-properties:config\b[^>]*>[\s\S]*?<\/secure-properties:config\s*>/gm, '')
+    .replace(/<secure-properties:config\b[^>]*\/\s*>/gm, '');
 }

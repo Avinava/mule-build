@@ -6,8 +6,11 @@
         "lib": [
             "ES2022"
         ],
+        "types": [
+            "node"
+        ],
         "outDir": "./dist",
-        "rootDir": ".",
+        "rootDir": "./src",
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
@@ -22,8 +25,7 @@
         "noFallthroughCasesInSwitch": true
     },
     "include": [
-        "src/**/*",
-        "bin/**/*"
+        "src/**/*"
     ],
     "exclude": [
         "node_modules",

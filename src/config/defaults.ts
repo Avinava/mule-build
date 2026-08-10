@@ -25,6 +25,9 @@ export const DEFAULT_CONFIG: MuleBuildConfig = {
     name: undefined, // Auto-detected from pom.xml
   },
   profiles: DEFAULT_PROFILES,
+  runtime: {
+    strictVersion: true,
+  },
 };
 
 /**

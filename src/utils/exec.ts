@@ -27,7 +27,7 @@ export async function exec(
   return new Promise((resolve) => {
     const proc = spawn(command, args, {
       ...options,
-      shell: true,
+      shell: false,
     });
 
     let stdout = '';
@@ -76,7 +76,7 @@ export async function execWithOutput(
     const proc = spawn(command, args, {
       ...options,
       stdio,
-      shell: true,
+      shell: false,
     });
 
     const appendToBuffer = (data: Buffer) => {
@@ -125,6 +125,7 @@ export async function execWithOutput(
  * Check if a command exists
  */
 export async function commandExists(command: string): Promise<boolean> {
-  const result = await exec('which', [command]);
+  const locator = process.platform === 'win32' ? 'where' : 'which';
+  const result = await exec(locator, [command]);
   return result.success && result.data?.exitCode === 0;
 }

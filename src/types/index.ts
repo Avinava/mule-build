@@ -2,14 +2,60 @@
  * Core type definitions for mule-build
  */
 
-// Build environments (optional - only needed for production enforcement)
-export type BuildEnvironment = 'production';
+/** Named build profile from mule-build.yaml. */
+export type BuildProfile = string;
+
+/** @deprecated Use BuildProfile. */
+export type BuildEnvironment = BuildProfile;
 
 // Version bump types
 export type BumpType = 'major' | 'minor' | 'patch';
 
 // Secure property processing modes
-export type ProcessMode = 'strip' | 'enforce';
+export type ProcessMode = 'strip' | 'enforce' | 'unchanged';
+
+export interface RuntimeConfig {
+  /** Explicit Mule runtime home. */
+  home?: string;
+  /** Additional directories containing Mule runtime installations. */
+  searchPaths?: string[];
+  /** Reject an incompatible fallback when .classpath declares a runtime. */
+  strictVersion?: boolean;
+}
+
+export interface ResolvedRuntime {
+  path: string;
+  version: string;
+  source: 'option' | 'env' | 'config' | 'project' | 'auto';
+  requiredVersion?: string;
+}
+
+export interface RuntimeStatus {
+  runtime: ResolvedRuntime;
+  running: boolean;
+  port?: number;
+  portInUse?: boolean;
+  debugPortInUse?: boolean;
+  message: string;
+}
+
+export interface RuntimeStatusOptions {
+  /** Mule project directory used for config and version matching. */
+  cwd?: string;
+  /** Explicit Mule runtime home. */
+  runtimeHome?: string;
+  /** Optional application port to probe. */
+  port?: number;
+}
+
+export interface StopRuntimeOptions {
+  /** Mule project directory used for config and version matching. */
+  cwd?: string;
+  /** Explicit Mule runtime home. */
+  runtimeHome?: string;
+  /** Maximum time to wait for the runtime to stop. */
+  timeoutMs?: number;
+}
 
 /**
  * Result type for operations that can fail
@@ -40,6 +86,8 @@ export function err<E = Error>(error: E): Result<never, E> {
 export interface PackageOptions {
   /** Target environment: production (triggers enforcement) */
   environment?: BuildEnvironment;
+  /** Named profile. Takes precedence over the deprecated environment field. */
+  profile?: BuildProfile;
   /** Strip secure:: prefixes for local development (explicit opt-in) */
   stripSecure?: boolean;
   /** Include source code in package (for Studio import) */
@@ -50,6 +98,10 @@ export interface PackageOptions {
   version?: string;
   /** Custom output directory for the built JAR (defaults to target/) */
   outputDir?: string;
+  /** Run Maven clean before package. Defaults to true. */
+  clean?: boolean;
+  /** Override a profile's clean-worktree requirement. */
+  enforceGitClean?: boolean;
   /** Working directory (defaults to cwd) */
   cwd?: string;
 }
@@ -93,6 +145,10 @@ export interface RunOptions {
   skipTests?: boolean;
   /** Working directory (defaults to cwd) */
   cwd?: string;
+  /** Explicit Mule runtime home. */
+  runtimeHome?: string;
+  /** Maximum time to wait for runtime/deployment readiness. */
+  startupTimeoutMs?: number;
 }
 
 /**
@@ -105,6 +161,9 @@ export interface RunResult {
   jarPath: string;
   /** Message from the runtime */
   message: string;
+  runtime: ResolvedRuntime;
+  running: boolean;
+  debug: boolean;
 }
 
 /**
@@ -119,6 +178,8 @@ export interface ReleaseOptions {
   push?: boolean;
   /** Working directory (defaults to cwd) */
   cwd?: string;
+  /** Preview the release without changing files or git state. */
+  dryRun?: boolean;
 }
 
 /**
@@ -133,6 +194,8 @@ export interface ReleaseResult {
   tagName?: string;
   /** Whether changes were pushed */
   pushed: boolean;
+  /** Whether this was a non-mutating preview. */
+  dryRun?: boolean;
 }
 
 /**
@@ -221,6 +284,7 @@ export interface MuleBuildConfig {
   profiles?: {
     [key: string]: ProfileConfig;
   };
+  runtime?: RuntimeConfig;
 }
 
 /**

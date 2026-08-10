@@ -1,304 +1,162 @@
-<p align="center">
-  <img src="assets/logo.svg" alt="Mule-Build" width="600" />
-</p>
+# @sfdxy/mule-build
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/v/@sfdxy/mule-build?style=flat-square&color=f97316" alt="npm version" /></a>
-  <a href="https://github.com/Avinava/mule-build/actions"><img src="https://img.shields.io/github/actions/workflow/status/Avinava/mule-build/ci.yml?style=flat-square&color=38bdf8" alt="CI" /></a>
-  <a href="https://github.com/Avinava/mule-build/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
-  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/dm/@sfdxy/mule-build?style=flat-square&color=fbbf24" alt="Downloads" /></a>
-</p>
+Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or MCP server.
 
-<p align="center">
-  <strong>A type-safe CLI and library for MuleSoft application build automation.</strong>
-</p>
+Version 2 fixes the installed-package layout, uses one package version everywhere, requires Node.js 20.19 or newer, validates configuration, resolves a project-compatible Mule runtime, and keeps secure-property transformations out of the source checkout during builds.
 
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#cli-commands">CLI Commands</a> •
-  <a href="#programmatic-api">API</a> •
-  <a href="#ai-agent-integration-mcp">MCP / AI</a>
-</p>
+See [CHANGELOG.md](CHANGELOG.md) for the complete v2 release summary and upgrade notes.
 
----
-
-## Features
-
-- 🔒 **Safe by Default** - Properties are never modified unless explicitly requested
-- 📦 **Flexible Builds** - Support for normal, local dev, and production builds
-- 🚀 **Local Development** - One command to build and deploy locally
-- 🏷️ **Release Automation** - Semantic versioning and git tagging
-- 🔌 **Dual Interface** - Both CLI and programmatic API (MCP-ready)
-- 📝 **TypeScript** - Full type safety and exported types
-
-## Installation
+## Install
 
 ```bash
-# Global installation
-npm install -g @sfdxy/mule-build
-
-# Local installation
-npm install @sfdxy/mule-build
-
-# Or use npx directly
-npx @sfdxy/mule-build --help
+npm install --global @sfdxy/mule-build@2.0.0
+mule-build --version
+mule-build --help
 ```
 
-## Quick Start
+For CI, prefer `npx -y @sfdxy/mule-build@2.0.0 ...` so the executed version is explicit.
+
+## Commands
+
+Run commands from a Mule project root or pass `-C /path/to/project`.
 
 ```bash
-# Normal build (properties untouched)
+# Diagnose build readiness (runtime is informational here)
+mule-build doctor --operation build
+
+# Safe default build: mvn clean package
 mule-build package
 
-# Build with stripped secure:: prefixes for local development
+# Apply a named mule-build.yaml profile
+mule-build package --profile production
+
+# Build from an isolated copy with secure:: removed; source is unchanged
 mule-build package --strip-secure
 
-# Build for production (enforces secure:: prefixes)
-mule-build package -e production
+# Build, start a compatible runtime if needed, and deploy
+mule-build run --runtime-home /opt/mule-4.10.2
+mule-build run --debug
 
-# Check for unsecured sensitive properties
+# Inspect or stop the selected runtime
+mule-build status --runtime-home /opt/mule-4.10.2
+mule-build stop --runtime-home /opt/mule-4.10.2
+
+# Security operations
 mule-build enforce
+mule-build strip --dry-run
+
+# Preview before mutating POM/git state
+mule-build release --bump patch --dry-run
+mule-build release --bump patch
 ```
 
-## CLI Commands
-
-### `package`
-
-Build the MuleSoft application package.
-
-```bash
-mule-build package [options]
-
-Options:
-  --strip-secure           Strip secure:: prefixes for local development (explicit opt-in)
-  -e, --env <environment>  Target environment: production (enforces secure::)
-  -s, --with-source        Include source code in package (Studio importable)
-  -S, --skip-tests         Skip MUnit tests
-  --version <version>      Override version from pom.xml
-  -o, --output <path>      Output directory for built JAR (defaults to target/)
-```
-
-**Examples:**
-
-```bash
-# Normal build - properties are NOT modified (safe default)
-mule-build package
-
-# Build with secure:: prefixes stripped for local Anypoint Studio
-mule-build package --strip-secure --skip-tests
-
-# Production build - validates all sensitive properties have secure::
-mule-build package -e production
-
-# Build and output to a custom directory
-mule-build package --strip-secure --skip-tests -o /tmp/builds
-```
-
-### Build Modes
-
-| Command | Behavior | Use Case |
-|---------|----------|----------|
-| `mule-build package` | Normal build, no modifications | General purpose |
-| `mule-build package --strip-secure` | Strips `secure::` prefixes | Local dev / Studio |
-| `mule-build package -e production` | Enforces `secure::` present | CloudHub / RTF |
-
-> **Important:** The `--strip-secure` flag is mutually exclusive with `-e production`.
-
-### `run`
-
-Build and deploy to local Mule runtime.
-
-```bash
-mule-build run [options]
-
-Options:
-  -d, --debug          Enable remote debugging on port 5005
-  -c, --clean          Run mvn clean before building
-  --strip-secure       Strip secure:: prefixes for local development
-  -S, --skip-tests     Skip MUnit tests
-```
-
-> **Note:** Requires `MULE_HOME` environment variable to be set.
-
-### `release`
-
-Bump version and create a release.
-
-```bash
-mule-build release -b <type> [options]
-
-Options:
-  -b, --bump <type>  Version bump type: major | minor | patch (required)
-  --no-tag           Skip git tag creation
-  --no-push          Skip git push
-```
-
-**Examples:**
-
-```bash
-# Minor version bump with tag and push
-mule-build release -b minor
-
-# Patch release without pushing
-mule-build release -b patch --no-push
-```
-
-### `strip`
-
-Strip `secure::` prefixes from XML files. Use this for manual stripping.
-
-```bash
-mule-build strip [options]
-
-Options:
-  -f, --file <path>   Process single file
-  -d, --dir <path>    Process all XML files in directory (default: src/main/mule)
-  --dry-run           Show changes without modifying files
-```
-
-This transforms:
-- `${secure::db.password}` → `${db.password}`
-- `Mule::p('secure::api.key')` → `Mule::p('api.key')`
-
-### `enforce`
-
-Check for unsecured sensitive properties.
-
-```bash
-mule-build enforce [options]
-
-Options:
-  -f, --file <path>   Check single file
-  -d, --dir <path>    Check all XML files in directory (default: src/main/mule)
-```
-
-## Programmatic API
-
-All commands are available as typed async functions:
-
-```typescript
-import { packageProject, stripSecure, enforceSecure, releaseVersion } from 'mule-build';
-
-// Normal build (no property modifications)
-const result = await packageProject({
-  skipTests: true,
-});
-
-// Build with stripped secure:: prefixes
-const localResult = await packageProject({
-  stripSecure: true,
-  withSource: true,
-});
-
-// Production build with enforcement
-const prodResult = await packageProject({
-  environment: 'production',
-});
-
-// Build to a custom output directory
-const customOutputResult = await packageProject({
-  stripSecure: true,
-  skipTests: true,
-  outputDir: '/tmp/builds',
-});
-
-if (result.success) {
-  console.log(`Built: ${result.data.jarPath}`);
-}
-
-// Strip secure prefixes manually
-const stripResult = await stripSecure({
-  directory: 'src/main/mule',
-  dryRun: true,
-});
-
-// Enforce security
-const enforceResult = await enforceSecure({
-  directory: 'src/main/mule',
-});
-
-if (!enforceResult.data.valid) {
-  console.error('Violations:', enforceResult.data.violations);
-}
-```
+`package --env` remains as a deprecated alias for `--profile`. A profile name is valid only when it exists in `mule-build.yaml` (including the built-in `production` default).
 
 ## Configuration
 
-Create an optional `mule-build.yaml` in your project root:
+Create `mule-build.yaml` in the Mule project root:
 
 ```yaml
 project:
-  name: "my-api"  # Optional, defaults to pom.xml name
+  name: orders-api
 
 profiles:
+  local:
+    description: Local artifact
+    mavenProfile: local
+    secureProperties: unchanged
+    includeSource: true
+    enforceGitClean: false
   production:
-    description: "CI/CD Artifacts"
-    mavenProfile: "prod"
-    secureProperties: "enforce"
+    description: Release artifact
+    mavenProfile: prod
+    secureProperties: enforce
     includeSource: false
     enforceGitClean: true
+
+runtime:
+  # home: /opt/mule-enterprise-standalone-4.10.2
+  searchPaths:
+    - ~/muleRuntimes
+  strictVersion: true
 ```
 
-### Default Behavior
+Unknown configuration keys and unknown profile names fail early. Runtime selection uses this precedence:
 
-Without a config file, sensible defaults are used:
+1. `--runtime-home` / API `runtimeHome`
+2. `MULE_HOME`
+3. `runtime.home`
+4. a compatible runtime under `MULE_RUNTIMES_DIR`, `runtime.searchPaths`, `~/muleRuntimes`, `~/AnypointStudio/runtimes`, or the standard macOS Anypoint Studio plugins directory
 
-| Command | Maven Profile | Secure Props | Include Source |
-|---------|---------------|--------------|----------------|
-| `package` | none | unchanged | false |
-| `package --strip-secure` | none | stripped | false |
-| `package -e production` | prod | enforced | false |
+When `.classpath` declares a Mule runtime, the resolver matches major, minor, and edition. With `strictVersion: true` (the default), it rejects an incompatible fallback.
 
-## TypeScript Support
+## Secure properties
 
-All types are exported:
+Normal builds do not rewrite XML. Profiles may select:
 
-```typescript
-import type {
-  PackageOptions,
-  PackageResult,
-  StripOptions,
-  StripResult,
-  EnforceOptions,
-  EnforceResult,
-  ReleaseOptions,
-  ReleaseResult,
-  Result,
-  BuildEnvironment,
-  BumpType,
-} from 'mule-build';
+- `unchanged`: build source as-is.
+- `enforce`: fail if sensitive property references omit `secure::`.
+- `strip`: build an isolated staged copy with prefixes and secure-properties config removed.
+
+CLI `--strip-secure` is explicit opt-in and conflicts with a profile that enforces security. `strip` modifies source only when called directly without `--dry-run`; use the preview first.
+
+## JavaScript and TypeScript API
+
+```ts
+import {
+  packageProject,
+  runLocal,
+  releaseVersion,
+  enforceSecure,
+  stripSecure,
+  systemCheck,
+  getRuntimeStatus,
+  stopRuntime,
+} from '@sfdxy/mule-build';
+
+const readiness = await systemCheck('/workspace/orders-api', 'run');
+if (!readiness.success || !readiness.data?.ready) {
+  throw readiness.error ?? new Error('Project is not ready');
+}
+
+const build = await packageProject({
+  cwd: '/workspace/orders-api',
+  profile: 'production',
+});
+
+const status = await getRuntimeStatus({
+  cwd: '/workspace/orders-api',
+  runtimeHome: '/opt/mule-enterprise-standalone-4.10.2',
+});
 ```
 
-## AI Agent Integration (MCP)
+All operations return `Promise<Result<T>>`; expected operational failures are returned in `result.error`. The supported subpath `@sfdxy/mule-build/api` exports the same high-level APIs.
 
-This tool exposes a **Model Context Protocol (MCP)** server, allowing AI agents (like Claude Desktop, IDE assistants) to directly interact with your build system to inspect projects, run builds, and manage releases.
+## MCP server
 
-### Features
+The stdio server is started with:
 
-**Tools** (all support optional `cwd` parameter for remote project directories):
+```bash
+npx -y @sfdxy/mule-build@2.0.0 mcp
+```
 
-| Tool | Description |
-|------|-------------|
-| `run_build` | Build Mule application package |
-| `run_app` | Deploy to local Mule runtime |
-| `stop_app` | Stop local Mule runtime |
-| `check_app_status` | Check runtime status and port 8081 |
-| `release_version` | Bump version and create git tag |
-| `enforce_security` | Scan for unsecured properties |
-| `strip_secure` | Strip `secure::` prefixes for local dev |
-| `system_check` | Pre-flight environment validation |
+Codex CLI:
 
-**Resources**:
-- `mule-build://config` - Project configuration
-- `mule-build://docs/design` - Design documentation
-- `mule-build://docs/best-practices` - Best practices guide
-- `mule-build://docs/folder-structure` - Project structure conventions
+```bash
+codex mcp add mule-build -- npx -y @sfdxy/mule-build@2.0.0 mcp
+codex mcp list
+```
 
-### Setup for VS Code (Recommended)
+Codex stores this server in its shared MCP configuration, so the CLI, desktop app, and IDE extension can use the same entry. Restart an already-open client after adding the server.
 
-Create `.vscode/mcp.json` in your workspace:
+Claude Code user scope:
+
+```bash
+claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@2.0.0 mcp
+claude mcp list
+```
+
+VS Code `.vscode/mcp.json`:
 
 ```json
 {
@@ -306,87 +164,34 @@ Create `.vscode/mcp.json` in your workspace:
     "mule-build": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.0.0", "mcp"]
     }
   }
 }
 ```
 
-The agent will now be able to "see" your MuleSoft project structure and offer build/release actions autonomously.
+The server exposes these stable v2 tools:
 
-### Setup for Claude Desktop
+- `run_build`, `run_app`, `stop_runtime`, `check_runtime_status`
+- `release_version` (preview unless `confirm: true`)
+- `enforce_security`, `strip_secure` (dry-run by default)
+- `system_check`, `get_project_config`
 
-Add the following to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "mule-build": {
-      "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build", "mcp"]
-    }
-  }
-}
-```
-
-
-## Requirements
-
-- Node.js >= 18
-- Maven (for build operations)
-- Git (for release operations)
-- MULE_HOME environment variable (for run command)
+It also publishes `quick-start`, `release-checklist`, and `security-audit` prompts plus packaged documentation resources under `mule-build://docs/*`. MCP logs go to stderr so stdout remains protocol-safe.
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
+npm ci
+npm run verify
 npm run build
-
-# Run tests
-npm test
-
-# Lint
-npm run lint
-
-# Format
-npm run format
+npm run test:package
 ```
 
-## Architecture
+The package supports Node.js 20.19, 22, and 24. `npm run test:mcp` runs a real MCP client/server negotiation rather than a constructor smoke test.
 
-```
-mule-build/
-├── src/
-│   ├── index.ts          # Package exports
-│   ├── cli.ts            # CLI implementation
-│   ├── api/              # Public API functions
-│   ├── engine/           # Core logic
-│   ├── config/           # Configuration
-│   ├── types/            # TypeScript types
-│   └── utils/            # Utilities
-├── test/                 # Tests and fixtures
-└── docs/                 # Documentation
-```
-
-See [docs/design.md](docs/design.md) for detailed technical documentation.
-
-## Migration from Bash Script
-
-| Bash Script | CLI Equivalent |
-|------------|----------------|
-| `./build.sh sandbox` | `mule-build package --strip-secure` |
-| `./build.sh production` | `mule-build package -e production` |
+See the [changelog](CHANGELOG.md), [design](docs/design.md), [best practices](docs/best-practices.md), and [folder structure](docs/folder-structure.md).
 
 ## License
 
 MIT
-
----
-
-<p align="center">
-  <sub>Built with 🚀 <a href="https://github.com/google-deepmind/antigravity">Antigravity</a></sub>
-</p>

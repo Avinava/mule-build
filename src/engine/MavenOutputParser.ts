@@ -55,11 +55,7 @@ const PATTERNS: Record<FailureCategory, RegExp[]> = {
     /UnknownHostException/,
     /Connection refused/,
   ],
-  oom: [
-    /java\.lang\.OutOfMemoryError/,
-    /GC overhead limit exceeded/,
-    /Java heap space/,
-  ],
+  oom: [/java\.lang\.OutOfMemoryError/, /GC overhead limit exceeded/, /Java heap space/],
   configuration: [
     /Non-parseable POM/,
     /Project build error/,

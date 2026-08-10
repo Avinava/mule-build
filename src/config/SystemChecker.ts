@@ -1,152 +1,136 @@
-/**
- * System Checker
- *
- * Pre-flight validation for mule-build operations.
- */
-
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { Result, ok, err } from '../types/index.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Result, ResolvedRuntime, ok, err } from '../types/index.js';
 import { isMavenInstalled } from '../engine/MavenBuilder.js';
-import { validateMuleHome } from '../engine/LocalRuntime.js';
 import { pomExists } from '../engine/PomParser.js';
+import { resolveRuntime } from '../engine/RuntimeResolver.js';
+import { loadConfig } from './ConfigLoader.js';
+
+export type SystemCheckOperation = 'build' | 'run' | 'release';
 
 export interface SystemCheckDetail {
+  component: string;
+  required: boolean;
   passed: boolean;
   message: string;
   remediation?: string;
 }
 
 export interface SystemCheckResult {
+  ready: boolean;
+  operation: SystemCheckOperation;
   maven: boolean;
-  muleHome: boolean;
+  runtime: boolean;
   pomXml: boolean;
+  mulePlugin: boolean;
   muleSourceDir: boolean;
+  resolvedRuntime?: ResolvedRuntime;
   details: SystemCheckDetail[];
 }
 
-export interface SystemCheckError {
-  component: string;
-  message: string;
+function pomHasMulePlugin(cwd: string): boolean {
+  try {
+    return /<artifactId>mule-maven-plugin<\/artifactId>/.test(
+      readFileSync(join(cwd, 'pom.xml'), 'utf-8')
+    );
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Run all system checks
- */
 export async function runSystemChecks(
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  operation: SystemCheckOperation = 'build'
 ): Promise<Result<SystemCheckResult>> {
-  const errors: SystemCheckError[] = [];
-
-  // Check Maven
-  const mavenInstalled = await isMavenInstalled();
-  if (!mavenInstalled) {
-    errors.push({
-      component: 'maven',
-      message: 'Maven is not installed or not in PATH',
-    });
-  }
-
-  // Check MULE_HOME (optional, only needed for run command) - project-aware
-  const muleHomeResult = validateMuleHome(cwd);
-  const muleHomeValid = muleHomeResult.success;
-
-  // Check pom.xml
-  const pomValid = pomExists(cwd);
-  if (!pomValid) {
-    errors.push({
-      component: 'pom.xml',
-      message: 'pom.xml not found in current directory',
-    });
-  }
-
-  // Check src/main/mule directory
-  const muleSourceDir = join(cwd, 'src', 'main', 'mule');
-  const muleSourceExists = existsSync(muleSourceDir);
-  if (!muleSourceExists) {
-    errors.push({
-      component: 'mule source',
-      message: 'src/main/mule directory not found',
-    });
-  }
+  const maven = await isMavenInstalled();
+  const pomXml = pomExists(cwd);
+  const mulePlugin = pomXml && pomHasMulePlugin(cwd);
+  const muleSourceDir = existsSync(join(cwd, 'src', 'main', 'mule'));
+  const runtimeRequired = operation === 'run';
+  const config = loadConfig(cwd);
+  const runtimeResult = config.success
+    ? resolveRuntime({ projectPath: cwd, config: config.data?.runtime })
+    : err(config.error ?? new Error('Configuration could not be loaded'));
+  const runtime = runtimeResult.success;
 
   const details: SystemCheckDetail[] = [
     {
-      passed: mavenInstalled,
-      message: mavenInstalled ? 'Maven installed' : 'Maven is not installed or not in PATH',
-      remediation: mavenInstalled
-        ? undefined
-        : 'Install Maven: `brew install maven` (macOS) or download from https://maven.apache.org/download.cgi. Ensure `mvn` is on your PATH.',
+      component: 'maven',
+      required: true,
+      passed: maven,
+      message: maven ? 'Maven installed' : 'Maven is not installed or not in PATH',
+      remediation: maven ? undefined : 'Install Maven and ensure `mvn` is on PATH.',
     },
     {
-      passed: muleHomeValid,
-      message: muleHomeValid ? 'MULE_HOME configured' : 'MULE_HOME not set or invalid',
-      remediation: muleHomeValid
-        ? undefined
-        : 'Set MULE_HOME to your Mule runtime installation, e.g. `export MULE_HOME=/opt/mule-enterprise-standalone-4.6.0`. Or install AnypointStudio which includes a bundled runtime.',
+      component: 'pom.xml',
+      required: true,
+      passed: pomXml,
+      message: pomXml ? 'pom.xml found' : 'pom.xml not found',
+      remediation: pomXml ? undefined : 'Run the command from a Mule project root.',
     },
     {
-      passed: pomValid,
-      message: pomValid ? 'pom.xml found' : 'pom.xml not found in current directory',
-      remediation: pomValid
-        ? undefined
-        : 'Ensure you are in the root directory of a MuleSoft project. The pom.xml should contain mule-maven-plugin.',
+      component: 'mule-maven-plugin',
+      required: true,
+      passed: mulePlugin,
+      message: mulePlugin ? 'mule-maven-plugin found' : 'mule-maven-plugin not found in pom.xml',
+      remediation: mulePlugin ? undefined : 'Use a Mule 4 application POM with mule-maven-plugin.',
     },
     {
-      passed: muleSourceExists,
-      message: muleSourceExists ? 'src/main/mule found' : 'src/main/mule directory not found',
-      remediation: muleSourceExists
+      component: 'mule-source',
+      required: true,
+      passed: muleSourceDir,
+      message: muleSourceDir ? 'src/main/mule found' : 'src/main/mule not found',
+      remediation: muleSourceDir
         ? undefined
-        : 'Create the Mule source directory: `mkdir -p src/main/mule` and add your Mule XML flow files there.',
+        : 'Restore the standard src/main/mule project directory.',
+    },
+    {
+      component: 'runtime',
+      required: runtimeRequired,
+      passed: runtime,
+      message: runtime
+        ? `Compatible Mule runtime found: ${runtimeResult.data?.version}`
+        : `Compatible Mule runtime not found: ${runtimeResult.error?.message}`,
+      remediation: runtime
+        ? undefined
+        : 'Install the project-compatible runtime or configure runtime.home/searchPaths.',
     },
   ];
 
-  const result: SystemCheckResult = {
-    maven: mavenInstalled,
-    muleHome: muleHomeValid,
-    pomXml: pomValid,
-    muleSourceDir: muleSourceExists,
+  const ready = details.every((detail) => !detail.required || detail.passed);
+  return ok({
+    ready,
+    operation,
+    maven,
+    runtime,
+    pomXml,
+    mulePlugin,
+    muleSourceDir,
+    resolvedRuntime: runtimeResult.data,
     details,
-  };
-
-  if (errors.length > 0) {
-    return err(new Error(errors.map((e) => `${e.component}: ${e.message}`).join('; ')));
-  }
-
-  return ok(result);
+  });
 }
 
-/**
- * Check if basic requirements for build are met
- */
 export async function canBuild(cwd: string = process.cwd()): Promise<Result<void>> {
-  const mavenInstalled = await isMavenInstalled();
-  if (!mavenInstalled) {
-    return err(new Error('Maven is not installed or not in PATH'));
+  const checks = await runSystemChecks(cwd, 'build');
+  if (!checks.success || !checks.data?.ready) {
+    const failures = checks.data?.details
+      .filter((detail) => detail.required && !detail.passed)
+      .map((detail) => detail.message)
+      .join('; ');
+    return err(checks.error ?? new Error(failures || 'Build requirements not met'));
   }
-
-  if (!pomExists(cwd)) {
-    return err(new Error('pom.xml not found in current directory'));
-  }
-
   return ok(undefined);
 }
 
-/**
- * Check if requirements for local run are met
- */
 export async function canRun(cwd: string = process.cwd()): Promise<Result<void>> {
-  // First check build requirements
-  const buildCheck = await canBuild(cwd);
-  if (!buildCheck.success) {
-    return buildCheck;
+  const checks = await runSystemChecks(cwd, 'run');
+  if (!checks.success || !checks.data?.ready) {
+    const failures = checks.data?.details
+      .filter((detail) => detail.required && !detail.passed)
+      .map((detail) => detail.message)
+      .join('; ');
+    return err(checks.error ?? new Error(failures || 'Run requirements not met'));
   }
-
-  // Check MULE_HOME (project-aware)
-  const muleHomeResult = validateMuleHome(cwd);
-  if (!muleHomeResult.success) {
-    return err(muleHomeResult.error ?? new Error('MULE_HOME is not configured'));
-  }
-
   return ok(undefined);
 }

@@ -36,10 +36,10 @@ export async function getCurrentBranch(cwd: string = process.cwd()): Promise<Res
  */
 export async function commit(
   message: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  paths: string[] = ['pom.xml']
 ): Promise<Result<string>> {
-  // Stage all changes
-  const addResult = await exec('git', ['add', '-A'], { cwd });
+  const addResult = await exec('git', ['add', '--', ...paths], { cwd });
   if (!addResult.success || addResult.data?.exitCode !== 0) {
     return err(new Error('Failed to stage changes'));
   }
@@ -74,15 +74,26 @@ export async function createTag(
 /**
  * Push to remote including tags
  */
-export async function pushWithTags(cwd: string = process.cwd()): Promise<Result<void>> {
-  const pushResult = await exec('git', ['push'], { cwd });
+export async function pushRelease(
+  tagName?: string,
+  cwd: string = process.cwd()
+): Promise<Result<void>> {
+  const branchResult = await getCurrentBranch(cwd);
+  if (!branchResult.success || !branchResult.data || branchResult.data === 'HEAD') {
+    return err(branchResult.error ?? new Error('Cannot push a release from detached HEAD'));
+  }
+  const pushResult = await exec('git', ['push', 'origin', branchResult.data], { cwd });
   if (!pushResult.success || pushResult.data?.exitCode !== 0) {
     return err(new Error(`Failed to push: ${pushResult.data?.stderr}`));
   }
 
-  const tagResult = await exec('git', ['push', '--tags'], { cwd });
-  if (!tagResult.success || tagResult.data?.exitCode !== 0) {
-    return err(new Error(`Failed to push tags: ${tagResult.data?.stderr}`));
+  if (tagName) {
+    const tagResult = await exec('git', ['push', 'origin', tagName], { cwd });
+    if (!tagResult.success || tagResult.data?.exitCode !== 0) {
+      return err(
+        new Error(`Branch pushed, but failed to push ${tagName}: ${tagResult.data?.stderr}`)
+      );
+    }
   }
 
   return ok(undefined);

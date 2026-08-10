@@ -6,18 +6,16 @@ project:
   # Optional: Override project name (defaults to pom.xml <name> or <artifactId>)
   # name: "my-mule-api"
 
-# Build profiles
-# Note: Only 'production' is a built-in environment
-# Use --strip-secure flag for local development instead of profiles
+# Named build profiles. The built-in production defaults may be overridden here.
 
 profiles:
   # Production profile for CI/CD
   production:
-    description: "CI/CD Artifacts"
-    mavenProfile: "prod"          # Maps to <id>prod</id> in pom.xml
-    secureProperties: "enforce"   # Validate all sensitive props have 'secure::'
-    includeSource: false          # Do not include source code
-    enforceGitClean: true         # Require clean git tree
+    description: 'CI/CD Artifacts'
+    mavenProfile: 'prod' # Maps to <id>prod</id> in pom.xml
+    secureProperties: 'enforce' # Validate all sensitive props have 'secure::'
+    includeSource: false # Do not include source code
+    enforceGitClean: true # Require clean git tree
 
   # Custom profile example for staging
   # staging:
@@ -25,3 +23,12 @@ profiles:
   #   mavenProfile: "staging"
   #   secureProperties: "enforce"
   #   includeSource: false
+
+# Local Mule runtime discovery and compatibility policy
+runtime:
+  # Explicit runtime home (MULE_HOME and --runtime-home take precedence)
+  # home: "/opt/mule-enterprise-standalone-4.10.2"
+  searchPaths:
+    - '~/muleRuntimes'
+  # Reject fallbacks that do not match the runtime declared by .classpath
+  strictVersion: true

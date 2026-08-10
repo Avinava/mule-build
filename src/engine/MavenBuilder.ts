@@ -28,6 +28,8 @@ export interface BuildResult {
 }
 
 export interface MavenBuildOptions {
+  /** Run the Maven clean lifecycle before package. Defaults to true. */
+  clean?: boolean;
   /** Maven profile to use */
   profile?: string;
   /** Attach source code to package */
@@ -53,7 +55,7 @@ export async function isMavenInstalled(): Promise<boolean> {
  * Generate Maven arguments for a build
  */
 export function generateMavenArgs(options: MavenBuildOptions = {}): string[] {
-  const args: string[] = ['clean', 'package'];
+  const args: string[] = options.clean === false ? ['package'] : ['clean', 'package'];
 
   // Add profile
   if (options.profile) {
@@ -136,13 +138,7 @@ export async function mavenBuild(options: MavenBuildOptions = {}): Promise<Resul
 
   if (exitCode !== 0) {
     const diagnostic = parseMavenFailure(output);
-    return err(
-      new BuildError(
-        `Maven build failed: ${diagnostic.summary}`,
-        diagnostic,
-        output
-      )
-    );
+    return err(new BuildError(`Maven build failed: ${diagnostic.summary}`, diagnostic, output));
   }
 
   const metrics = parseMavenSuccess(output, durationMs);

@@ -9,6 +9,44 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { Result, ok, err, PomInfo } from '../types/index.js';
 
+interface ElementRange {
+  contentStart: number;
+  contentEnd: number;
+}
+
+function findDirectProjectChild(content: string, childName: string): ElementRange | undefined {
+  const tags = /<(\/)?([A-Za-z_][\w:.-]*)(?:\s[^<>]*?)?(\/?)>/g;
+  const stack: string[] = [];
+  let childStart: number | undefined;
+  let match: RegExpExecArray | null;
+
+  while ((match = tags.exec(content))) {
+    const closing = Boolean(match[1]);
+    const name = match[2].split(':').pop()!;
+    const selfClosing = Boolean(match[3]);
+
+    if (closing) {
+      if (stack.length === 2 && stack[0] === 'project' && stack[1] === childName) {
+        return { contentStart: childStart!, contentEnd: match.index };
+      }
+      stack.pop();
+      continue;
+    }
+
+    if (stack.length === 1 && stack[0] === 'project' && name === childName) {
+      childStart = tags.lastIndex;
+    }
+    if (!selfClosing) stack.push(name);
+  }
+
+  return undefined;
+}
+
+function getDirectProjectValue(content: string, name: string): string | undefined {
+  const range = findDirectProjectChild(content, name);
+  return range ? content.slice(range.contentStart, range.contentEnd).trim() : undefined;
+}
+
 /**
  * Get the path to pom.xml in the given directory
  */
@@ -67,29 +105,10 @@ export function getPomInfo(cwd: string = process.cwd()): Result<PomInfo> {
   const content = pomResult.data;
   const info: PomInfo = {};
 
-  // Extract version (first occurrence, which is the project version)
-  const versionMatch = content.match(/<version>([^<]+)<\/version>/);
-  if (versionMatch) {
-    info.version = versionMatch[1];
-  }
-
-  // Extract artifactId (first occurrence)
-  const artifactMatch = content.match(/<artifactId>([^<]+)<\/artifactId>/);
-  if (artifactMatch) {
-    info.artifactId = artifactMatch[1];
-  }
-
-  // Extract name (first occurrence)
-  const nameMatch = content.match(/<name>([^<]+)<\/name>/);
-  if (nameMatch) {
-    info.name = nameMatch[1];
-  }
-
-  // Extract groupId (first occurrence)
-  const groupMatch = content.match(/<groupId>([^<]+)<\/groupId>/);
-  if (groupMatch) {
-    info.groupId = groupMatch[1];
-  }
+  info.version = getDirectProjectValue(content, 'version');
+  info.artifactId = getDirectProjectValue(content, 'artifactId');
+  info.name = getDirectProjectValue(content, 'name');
+  info.groupId = getDirectProjectValue(content, 'groupId');
 
   return ok(info);
 }
@@ -133,16 +152,10 @@ export function setVersion(version: string, cwd: string = process.cwd()): Result
     return err(pomResult.error ?? new Error('Failed to read pom.xml'));
   }
 
-  let content = pomResult.data;
-  let replaced = false;
-
-  // Replace only the first version tag
-  content = content.replace(/<version>([^<]+)<\/version>/, () => {
-    if (replaced) return `<version>${version}</version>`;
-    replaced = true;
-    return `<version>${version}</version>`;
-  });
-
+  const range = findDirectProjectChild(pomResult.data, 'version');
+  if (!range) return err(new Error('Direct project <version> not found in pom.xml'));
+  const content =
+    pomResult.data.slice(0, range.contentStart) + version + pomResult.data.slice(range.contentEnd);
   return writePom(content, cwd);
 }
 
@@ -155,13 +168,10 @@ export function setName(name: string, cwd: string = process.cwd()): Result<void>
     return err(pomResult.error ?? new Error('Failed to read pom.xml'));
   }
 
-  let content = pomResult.data;
-
-  // Replace the name tag
-  if (content.includes('<name>')) {
-    content = content.replace(/<name>[^<]*<\/name>/, `<name>${name}</name>`);
-  }
-
+  const range = findDirectProjectChild(pomResult.data, 'name');
+  if (!range) return err(new Error('Direct project <name> not found in pom.xml'));
+  const content =
+    pomResult.data.slice(0, range.contentStart) + name + pomResult.data.slice(range.contentEnd);
   return writePom(content, cwd);
 }
 

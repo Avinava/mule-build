@@ -1,100 +1,90 @@
-/**
- * Configuration Loader
- *
- * Loads and merges configuration from mule-build.yaml with defaults.
- */
-
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parse } from 'yaml';
+import { z } from 'zod';
 import { Result, ok, err, MuleBuildConfig, ProfileConfig } from '../types/index.js';
-import { DEFAULT_CONFIG, getDefaultProfile } from './defaults.js';
+import { DEFAULT_CONFIG } from './defaults.js';
 import { getProjectName } from '../engine/PomParser.js';
 
 const CONFIG_FILENAME = 'mule-build.yaml';
 
-/**
- * Load configuration from mule-build.yaml or use defaults
- */
+const ProfileSchema = z
+  .object({
+    description: z.string().optional(),
+    mavenProfile: z.string().min(1).optional(),
+    secureProperties: z.enum(['strip', 'enforce', 'unchanged']).optional(),
+    includeSource: z.boolean().optional(),
+    enforceGitClean: z.boolean().optional(),
+  })
+  .strict();
+
+const ConfigSchema = z
+  .object({
+    project: z
+      .object({ name: z.string().min(1).optional() })
+      .strict()
+      .optional(),
+    profiles: z.record(z.string(), ProfileSchema).optional(),
+    runtime: z
+      .object({
+        home: z.string().min(1).optional(),
+        searchPaths: z.array(z.string().min(1)).optional(),
+        strictVersion: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+function defaultConfig(): MuleBuildConfig {
+  return {
+    project: { ...DEFAULT_CONFIG.project },
+    profiles: Object.fromEntries(
+      Object.entries(DEFAULT_CONFIG.profiles ?? {}).map(([name, profile]) => [name, { ...profile }])
+    ),
+    runtime: { ...DEFAULT_CONFIG.runtime },
+  };
+}
+
 export function loadConfig(cwd: string = process.cwd()): Result<MuleBuildConfig> {
   const configPath = join(cwd, CONFIG_FILENAME);
+  let fileConfig: MuleBuildConfig = {};
 
-  // Start with defaults
-  let config: MuleBuildConfig = { ...DEFAULT_CONFIG };
-
-  // Try to load config file
   if (existsSync(configPath)) {
     try {
-      const content = readFileSync(configPath, 'utf-8');
-      const fileConfig = parse(content) as MuleBuildConfig;
-
-      // Merge with defaults
-      config = mergeConfig(config, fileConfig);
+      const parsed: unknown = parse(readFileSync(configPath, 'utf-8'));
+      fileConfig = ConfigSchema.parse(parsed ?? {});
     } catch (error) {
-      return err(
-        new Error(
-          `Failed to parse ${CONFIG_FILENAME}: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      return err(new Error(`Failed to parse ${CONFIG_FILENAME}: ${message}`));
     }
   }
 
-  // Auto-detect project name if not set
+  const base = defaultConfig();
+  const config: MuleBuildConfig = {
+    project: { ...base.project, ...fileConfig.project },
+    profiles: { ...base.profiles, ...fileConfig.profiles },
+    runtime: { ...base.runtime, ...fileConfig.runtime },
+  };
+
   if (!config.project?.name) {
-    const nameResult = getProjectName(cwd);
-    if (nameResult.success && nameResult.data) {
-      config.project = config.project ?? {};
-      config.project.name = nameResult.data;
-    }
+    const name = getProjectName(cwd);
+    if (name.success && name.data) config.project = { ...config.project, name: name.data };
   }
 
   return ok(config);
 }
 
-/**
- * Merge two configurations, with override taking precedence
- */
-function mergeConfig(base: MuleBuildConfig, override: MuleBuildConfig): MuleBuildConfig {
-  return {
-    project: {
-      ...base.project,
-      ...override.project,
-    },
-    profiles: {
-      ...base.profiles,
-      ...override.profiles,
-    },
-  };
+export function getProfileConfig(
+  config: MuleBuildConfig,
+  profileName: string
+): Result<ProfileConfig> {
+  const profile = config.profiles?.[profileName];
+  return profile
+    ? ok(profile)
+    : err(new Error(`Unknown build profile: ${profileName}. Configure it in ${CONFIG_FILENAME}.`));
 }
 
-/**
- * Get profile configuration for an environment
- */
-export function getProfileConfig(config: MuleBuildConfig, environment: string): ProfileConfig {
-  const profile = config.profiles?.[environment];
-
-  if (profile) {
-    return profile;
-  }
-
-  // Fall back to defaults for production
-  if (environment === 'production') {
-    return getDefaultProfile('production');
-  }
-
-  // Unknown environment, return empty profile
-  return {
-    description: 'Default',
-    mavenProfile: undefined,
-    secureProperties: undefined,
-    includeSource: false,
-    enforceGitClean: false,
-  };
-}
-
-/**
- * Check if configuration file exists
- */
 export function configExists(cwd: string = process.cwd()): boolean {
   return existsSync(join(cwd, CONFIG_FILENAME));
 }

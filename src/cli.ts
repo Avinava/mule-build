@@ -14,9 +14,11 @@ import { enforceSecure } from './api/enforce.js';
 import { setLogLevel } from './utils/logger.js';
 import { BumpType } from './types/index.js';
 import { BuildError } from './engine/MavenBuilder.js';
+import { runSystemChecks } from './config/SystemChecker.js';
+import { getRuntimeStatus, stopMuleRuntime } from './engine/LocalRuntime.js';
+import { PACKAGE_VERSION } from './version.js';
 
 // Package info
-const VERSION = '1.0.0';
 const NAME = 'mule-build';
 
 /**
@@ -28,8 +30,9 @@ export function createProgram(): Command {
   program
     .name(NAME)
     .description('MuleSoft build automation CLI')
-    .version(VERSION)
+    .version(PACKAGE_VERSION)
     .option('-v, --verbose', 'Enable verbose output')
+    .option('-C, --cwd <path>', 'Mule project directory', process.cwd())
     .hook('preAction', (thisCommand) => {
       const opts = thisCommand.opts();
       if (opts.verbose) {
@@ -42,33 +45,26 @@ export function createProgram(): Command {
     .command('package')
     .description('Build the MuleSoft application package')
     .option('--strip-secure', 'Strip secure:: prefixes for local development (explicit opt-in)')
-    .option('-e, --env <environment>', 'Target environment: production (enforces secure::)')
+    .option('-p, --profile <profile>', 'Named build profile from mule-build.yaml')
+    .option('-e, --env <environment>', 'Deprecated alias for --profile')
     .option('-s, --with-source', 'Include source code in package (Studio importable)')
     .option('-S, --skip-tests', 'Skip MUnit tests')
     .option('--version <version>', 'Override version')
     .option('-o, --output <path>', 'Output directory for the built JAR (defaults to target/)')
     .action(async (options) => {
-      // Validate environment if provided
-      if (options.env && options.env !== 'production') {
-        console.error(
-          chalk.red(`Invalid environment: ${options.env}. Only 'production' is supported.`)
-        );
-        process.exit(1);
-      }
-
-      // Warn about incompatible options
-      if (options.stripSecure && options.env === 'production') {
-        console.error(chalk.red('Cannot use --strip-secure with -e production'));
+      if (options.profile && options.env) {
+        console.error(chalk.red('Use either --profile or --env, not both'));
         process.exit(1);
       }
 
       const result = await packageProject({
-        environment: options.env,
+        profile: options.profile ?? options.env,
         stripSecure: options.stripSecure,
         withSource: options.withSource,
         skipTests: options.skipTests,
         version: options.version,
         outputDir: options.output,
+        cwd: program.opts().cwd,
       });
 
       if (!result.success) {
@@ -102,12 +98,17 @@ export function createProgram(): Command {
     .option('-c, --clean', 'Run mvn clean before building')
     .option('--strip-secure', 'Strip secure:: prefixes for local development')
     .option('-S, --skip-tests', 'Skip MUnit tests')
+    .option('--runtime-home <path>', 'Explicit Mule runtime home')
+    .option('--timeout <ms>', 'Runtime/deployment timeout in milliseconds')
     .action(async (options) => {
       const result = await runLocal({
         debug: options.debug,
         clean: options.clean,
         stripSecure: options.stripSecure,
         skipTests: options.skipTests,
+        runtimeHome: options.runtimeHome,
+        startupTimeoutMs: options.timeout ? Number(options.timeout) : undefined,
+        cwd: program.opts().cwd,
       });
 
       if (!result.success) {
@@ -134,6 +135,7 @@ export function createProgram(): Command {
     .requiredOption('-b, --bump <type>', 'Version bump type: major | minor | patch')
     .option('--no-tag', 'Skip git tag creation')
     .option('--no-push', 'Skip git push')
+    .option('--dry-run', 'Preview the version and tag without changing files')
     .action(async (options) => {
       const bump = options.bump as BumpType;
       if (!['major', 'minor', 'patch'].includes(bump)) {
@@ -145,6 +147,8 @@ export function createProgram(): Command {
         bump,
         tag: options.tag,
         push: options.push,
+        dryRun: options.dryRun,
+        cwd: program.opts().cwd,
       });
 
       if (!result.success) {
@@ -170,6 +174,7 @@ export function createProgram(): Command {
         file: options.file,
         directory: options.dir,
         dryRun: options.dryRun,
+        cwd: program.opts().cwd,
       });
 
       if (!result.success) {
@@ -194,6 +199,7 @@ export function createProgram(): Command {
       const result = await enforceSecure({
         file: options.file,
         directory: options.dir,
+        cwd: program.opts().cwd,
       });
 
       if (!result.success) {
@@ -207,6 +213,62 @@ export function createProgram(): Command {
         console.log(chalk.red(`\n✗ Found ${result.data?.violations.length} unsecured properties`));
         process.exit(1);
       }
+    });
+
+  program
+    .command('doctor')
+    .description('Check Mule project build or run readiness')
+    .option('--operation <operation>', 'build | run | release', 'build')
+    .action(async (options) => {
+      if (!['build', 'run', 'release'].includes(options.operation)) {
+        console.error(chalk.red(`Invalid operation: ${options.operation}`));
+        process.exit(1);
+      }
+      const result = await runSystemChecks(program.opts().cwd, options.operation);
+      if (!result.success || !result.data) {
+        console.error(chalk.red(result.error?.message ?? 'System check failed'));
+        process.exit(1);
+      }
+      for (const detail of result.data.details) {
+        const marker = detail.passed ? '✓' : detail.required ? '✗' : '○';
+        const optional = !detail.required && !detail.passed ? ' (optional)' : '';
+        console.log(`${marker} ${detail.message}${optional}`);
+      }
+      if (!result.data.ready) process.exitCode = 1;
+    });
+
+  program
+    .command('status')
+    .description('Check the project-compatible Mule runtime status')
+    .option('--runtime-home <path>', 'Explicit Mule runtime home')
+    .option('--port <port>', 'Optional application port')
+    .action(async (options) => {
+      const result = await getRuntimeStatus(
+        program.opts().cwd,
+        options.runtimeHome,
+        options.port ? Number(options.port) : undefined
+      );
+      if (!result.success || !result.data) {
+        console.error(chalk.red(result.error?.message ?? 'Runtime status failed'));
+        process.exit(1);
+      }
+      console.log(result.data.message);
+      console.log(
+        `Runtime ${result.data.runtime.version}: ${result.data.running ? 'running' : 'stopped'}`
+      );
+    });
+
+  program
+    .command('stop')
+    .description('Stop the project-compatible Mule runtime')
+    .option('--runtime-home <path>', 'Explicit Mule runtime home')
+    .action(async (options) => {
+      const result = await stopMuleRuntime(program.opts().cwd, options.runtimeHome);
+      if (!result.success) {
+        console.error(chalk.red(result.error?.message ?? 'Runtime stop failed'));
+        process.exit(1);
+      }
+      console.log(chalk.green('✓ Mule runtime stopped'));
     });
 
   // MCP Server command
@@ -229,13 +291,4 @@ export function createProgram(): Command {
 export async function run(args: string[] = process.argv): Promise<void> {
   const program = createProgram();
   await program.parseAsync(args);
-}
-
-// Run CLI if this is the main module
-const isMainModule = process.argv[1]?.includes('cli');
-if (isMainModule) {
-  run().catch((error) => {
-    console.error(chalk.red(`Fatal error: ${error.message}`));
-    process.exit(1);
-  });
 }

@@ -1,314 +1,192 @@
-/**
- * Package API
- *
- * Programmatic interface for building MuleSoft projects.
- */
-
 import {
-  existsSync,
   copyFileSync,
-  writeFileSync,
-  readFileSync,
+  cpSync,
+  existsSync,
   mkdirSync,
-  unlinkSync,
+  mkdtempSync,
+  readFileSync,
   rmSync,
-} from 'fs';
-import { join, basename, relative, dirname } from 'path';
-import { hostname, userInfo, tmpdir } from 'os';
-import { Result, ok, err, PackageOptions, PackageResult, DeploymentInfo } from '../types/index.js';
-import { loadConfig, getProfileConfig } from '../config/ConfigLoader.js';
+  writeFileSync,
+} from 'node:fs';
+import { basename, isAbsolute, join, relative } from 'node:path';
+import { hostname, tmpdir, userInfo } from 'node:os';
+import {
+  DeploymentInfo,
+  PackageOptions,
+  PackageResult,
+  ProcessMode,
+  Result,
+  err,
+  ok,
+} from '../types/index.js';
+import { getProfileConfig, loadConfig } from '../config/ConfigLoader.js';
 import { canBuild } from '../config/SystemChecker.js';
 import {
-  stripSecure,
   enforceSecure,
-  removeSecurePropertiesConfig,
   getXmlFiles,
+  removeSecurePropertiesConfig,
+  stripSecure,
 } from '../engine/XmlProcessor.js';
-import { mavenBuild, findBuiltJar, mavenClean } from '../engine/MavenBuilder.js';
-import { getProjectName, getVersion, setName, backupPom, restorePom } from '../engine/PomParser.js';
+import { findBuiltJar, mavenBuild } from '../engine/MavenBuilder.js';
+import { getProjectName, getVersion } from '../engine/PomParser.js';
+import { isWorkingTreeClean } from '../utils/git.js';
 import { logger } from '../utils/logger.js';
 
-/**
- * Backup XML files from a directory to a backup location
- */
-function backupXmlFiles(sourceDir: string, backupDir: string): string[] {
-  const backedUpFiles: string[] = [];
-
-  if (!existsSync(sourceDir)) {
-    return backedUpFiles;
-  }
-
-  // Create backup directory
-  mkdirSync(backupDir, { recursive: true });
-
-  // Get all XML files
-  const xmlFiles = getXmlFiles(sourceDir);
-
-  for (const file of xmlFiles) {
-    const relativePath = relative(sourceDir, file);
-    const backupPath = join(backupDir, relativePath);
-
-    // Create subdirectories in backup if needed
-    const backupSubDir = dirname(backupPath);
-    mkdirSync(backupSubDir, { recursive: true });
-
-    // Copy file to backup
-    copyFileSync(file, backupPath);
-    backedUpFiles.push(file);
-  }
-
-  return backedUpFiles;
+function safeName(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'mule-app'
+  );
 }
 
-/**
- * Restore XML files from backup
- */
-function restoreXmlFiles(sourceDir: string, backupDir: string): void {
-  if (!existsSync(backupDir)) {
-    return;
-  }
-
-  const xmlFiles = getXmlFiles(backupDir);
-
-  for (const backupFile of xmlFiles) {
-    const relativePath = relative(backupDir, backupFile);
-    const originalPath = join(sourceDir, relativePath);
-
-    // Restore the file
-    copyFileSync(backupFile, originalPath);
-  }
-
-  // Clean up backup directory
-  try {
-    rmSync(backupDir, { recursive: true, force: true });
-  } catch {
-    // Ignore cleanup errors
-  }
+function createStagedProject(cwd: string): string {
+  const stage = mkdtempSync(join(tmpdir(), 'mule-build-stage-'));
+  const excluded = new Set(['.git', 'target', 'node_modules', '.mule']);
+  cpSync(cwd, stage, {
+    recursive: true,
+    dereference: false,
+    filter(source) {
+      const first = relative(cwd, source).split(/[\\/]/)[0];
+      return !excluded.has(first);
+    },
+  });
+  return stage;
 }
 
-/**
- * Build a MuleSoft project package
- *
- * By default, builds without modifying any files.
- * Use `stripSecure: true` to strip secure:: prefixes for local development.
- * Use `environment: 'production'` to enforce secure:: prefixes.
- */
 export async function packageProject(options: PackageOptions = {}): Promise<Result<PackageResult>> {
   const cwd = options.cwd ?? process.cwd();
+  const profileName = options.profile ?? options.environment;
   const configChanges: string[] = [];
-  const muleDir = join(cwd, 'src', 'main', 'mule');
-  // Use temp directory for backups to avoid cluttering the project folder
-  // Include timestamp and random suffix for concurrent build safety
-  const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const backupDir = join(tmpdir(), `mule-build-backup-${uniqueId}`);
+  let stage: string | undefined;
 
-  // Pre-flight check
-  const checkResult = await canBuild(cwd);
-  if (!checkResult.success) {
-    return err(checkResult.error ?? new Error('Build requirements not met'));
-  }
+  const buildCheck = await canBuild(cwd);
+  if (!buildCheck.success) return err(buildCheck.error ?? new Error('Build requirements not met'));
 
-  // Load configuration
   const configResult = loadConfig(cwd);
   if (!configResult.success || !configResult.data) {
     return err(configResult.error ?? new Error('Failed to load configuration'));
   }
 
-  const config = configResult.data;
-  const profile = options.environment
-    ? getProfileConfig(config, options.environment)
-    : { mavenProfile: undefined, includeSource: options.withSource, secureProperties: undefined };
+  const profileResult = profileName
+    ? getProfileConfig(configResult.data, profileName)
+    : ok({
+        mavenProfile: undefined,
+        includeSource: false,
+        secureProperties: 'unchanged' as ProcessMode,
+        enforceGitClean: false,
+      });
+  if (!profileResult.success || !profileResult.data) return err(profileResult.error!);
+  const profile = profileResult.data;
+  const processMode: ProcessMode = options.stripSecure
+    ? 'strip'
+    : (profile.secureProperties ?? 'unchanged');
 
-  // Get project info
+  if (options.stripSecure && profile.secureProperties === 'enforce') {
+    return err(new Error(`Cannot strip secure properties with enforcing profile "${profileName}"`));
+  }
+  const enforceGitClean = options.enforceGitClean ?? profile.enforceGitClean ?? false;
+  if (enforceGitClean && !(await isWorkingTreeClean(cwd))) {
+    return err(new Error(`Profile "${profileName}" requires a clean git working tree`));
+  }
+
   const nameResult = getProjectName(cwd);
-  const projectName = nameResult.success && nameResult.data ? nameResult.data : 'mule-app';
-
   const versionResult = getVersion(cwd);
-  const version =
-    options.version ?? (versionResult.success && versionResult.data ? versionResult.data : '1.0.0');
-
-  // Determine build mode
-  const buildMode = options.stripSecure
-    ? 'strip-secure'
-    : options.environment === 'production'
-      ? 'production'
-      : 'default';
-
-  logger.info(`Building ${projectName} (mode: ${buildMode})...`);
-
-  // Backup pom.xml
-  const pomBackupResult = backupPom(cwd);
-  if (!pomBackupResult.success) {
-    logger.warn('Could not backup pom.xml, proceeding anyway');
-  }
-
-  // Backup XML files before modification (only if stripping)
-  let xmlFilesBackedUp = false;
-  if (options.stripSecure) {
-    logger.step('Backing up XML files...');
-    const backedUp = backupXmlFiles(muleDir, backupDir);
-    xmlFilesBackedUp = backedUp.length > 0;
-    if (xmlFilesBackedUp) {
-      logger.debug(`Backed up ${backedUp.length} XML files`);
-    }
-  }
+  const projectName = safeName(nameResult.data ?? 'mule-app');
+  const version = safeName(options.version ?? versionResult.data ?? '1.0.0');
+  const sourceMuleDir = join(cwd, 'src', 'main', 'mule');
 
   try {
-    // Clean first
-    logger.step('Cleaning previous build...');
-    const cleanResult = await mavenClean(cwd);
-    if (!cleanResult.success) {
-      logger.warn(`Maven clean failed: ${cleanResult.error?.message}, continuing anyway`);
-    }
-
-    // Handle stripping for local development (explicit opt-in)
-    if (options.stripSecure) {
-      logger.step('Stripping secure:: prefixes (--strip-secure)...');
-
-      const stripResult = await stripSecure(muleDir, { cwd });
-      if (stripResult.success && stripResult.data) {
-        configChanges.push(
-          `Stripped secure:: prefixes from ${stripResult.data.filesProcessed.length} files`
-        );
-        configChanges.push(`Total replacements: ${stripResult.data.replacementCount}`);
+    if (processMode === 'enforce') {
+      const enforcement = await enforceSecure(sourceMuleDir, { cwd });
+      if (!enforcement.success || !enforcement.data) {
+        return err(enforcement.error ?? new Error('Security enforcement failed'));
       }
-
-      // Remove secure-properties:config from global.xml
-      const globalXmlPath = join(muleDir, 'global.xml');
-      if (existsSync(globalXmlPath)) {
-        const content = readFileSync(globalXmlPath, 'utf-8');
-        const newContent = removeSecurePropertiesConfig(content);
-        if (content !== newContent) {
-          writeFileSync(globalXmlPath, newContent);
-          configChanges.push('Removed secure-properties:config from global.xml');
-        }
-      }
-    }
-
-    // Handle production enforcement
-    if (options.environment === 'production') {
-      logger.step('Validating secure:: enforcement for production...');
-
-      const enforceResult = await enforceSecure(muleDir, { cwd });
-      if (enforceResult.success && enforceResult.data && !enforceResult.data.valid) {
-        const violations = enforceResult.data.violations;
-        logger.error(`Found ${violations.length} unsecured sensitive properties:`);
-        for (const v of violations.slice(0, 5)) {
-          logger.error(`  ${v.file}:${v.line} - ${v.value}`);
-        }
-        if (violations.length > 5) {
-          logger.error(`  ... and ${violations.length - 5} more`);
-        }
+      if (!enforcement.data.valid) {
         return err(
-          new Error('Security validation failed. Use secure:: prefix for sensitive properties.')
+          new Error(
+            `Security validation failed with ${enforcement.data.violations.length} unsecured properties`
+          )
         );
       }
-
-      configChanges.push('Validated all sensitive properties have secure:: prefix');
+      configChanges.push('Validated secure property references');
     }
 
-    // Build package name
-    const envSuffix = options.environment ? `-${options.environment}` : '';
-    const stripSuffix = options.stripSecure && !options.environment ? '-local' : '';
-    const envName = `${projectName}${envSuffix}${stripSuffix}-${version}`;
-    setName(envName, cwd);
-    configChanges.push(`Set package name to: ${envName}`);
+    let buildCwd = cwd;
+    if (processMode === 'strip') {
+      stage = createStagedProject(cwd);
+      buildCwd = stage;
+      const stagedMuleDir = join(stage, 'src', 'main', 'mule');
+      const stripping = await stripSecure(stagedMuleDir, { cwd: stage });
+      if (!stripping.success || !stripping.data) {
+        return err(stripping.error ?? new Error('Secure property stripping failed'));
+      }
+      for (const file of getXmlFiles(stagedMuleDir)) {
+        const content = readFileSync(file, 'utf-8');
+        const updated = removeSecurePropertiesConfig(content);
+        if (updated !== content) writeFileSync(file, updated);
+      }
+      configChanges.push(`Stripped ${stripping.data.replacementCount} secure property references`);
+      configChanges.push('Built from an isolated staging copy; source checkout unchanged');
+    }
 
-    // Run Maven build
-    logger.step('Running Maven build...');
-    const buildResult = await mavenBuild({
-      cwd,
+    logger.info(`Building ${projectName}${profileName ? ` with profile ${profileName}` : ''}...`);
+    const build = await mavenBuild({
+      cwd: buildCwd,
+      clean: options.clean ?? true,
       profile: profile.mavenProfile,
       withSource: options.withSource ?? profile.includeSource ?? false,
       skipTests: options.skipTests ?? false,
     });
+    if (!build.success) return err(build.error ?? new Error('Maven build failed'));
 
-    if (!buildResult.success) {
-      return err(buildResult.error ?? new Error('Maven build failed'));
-    }
+    const jar = findBuiltJar(buildCwd);
+    if (!jar.success || !jar.data) return err(jar.error ?? new Error('Built JAR not found'));
 
-    // Find the built JAR
-    const jarResult = findBuiltJar(cwd);
-    if (!jarResult.success || !jarResult.data) {
-      return err(jarResult.error ?? new Error('Could not find built JAR'));
-    }
-
-    const jarPath = jarResult.data;
-    const originalJarName = basename(jarPath);
-
-    // Copy and rename the JAR
+    const suffix = profileName
+      ? `-${safeName(profileName)}`
+      : processMode === 'strip'
+        ? '-local'
+        : '';
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const finalJarName = `${projectName}${envSuffix}${stripSuffix}-${version}-${timestamp}.jar`;
+    const finalName = `${projectName}${suffix}-${version}-${timestamp}.jar`;
+    const outputDir = options.outputDir
+      ? isAbsolute(options.outputDir)
+        ? options.outputDir
+        : join(cwd, options.outputDir)
+      : join(cwd, 'target');
+    mkdirSync(outputDir, { recursive: true });
+    const finalPath = join(outputDir, finalName);
+    copyFileSync(jar.data, finalPath);
 
-    // Determine output directory (custom or default target/)
-    const outputDir = options.outputDir ?? join(cwd, 'target');
-
-    // Ensure output directory exists
-    if (options.outputDir) {
-      mkdirSync(outputDir, { recursive: true });
-    }
-
-    const finalJarPath = join(outputDir, finalJarName);
-
-    copyFileSync(jarPath, finalJarPath);
-
-    // Create deployment info
     const deploymentInfo: DeploymentInfo = {
-      environment: options.environment,
-      packageName: finalJarName,
+      environment: profileName,
+      packageName: finalName,
       version,
       buildDate: new Date().toISOString(),
       builtBy: userInfo().username,
       machine: hostname(),
       configChanges,
     };
+    writeFileSync(
+      join(outputDir, 'deployment-info.txt'),
+      [
+        `Environment: ${profileName ?? 'default'}`,
+        `Package Name: ${finalName}`,
+        `Build Date: ${deploymentInfo.buildDate}`,
+        `Version: ${version}`,
+        `Built By: ${deploymentInfo.builtBy}`,
+        `Machine: ${deploymentInfo.machine}`,
+        ...configChanges.map((change) => `- ${change}`),
+        `Original JAR: ${basename(jar.data)}`,
+      ].join('\n')
+    );
 
-    // Write deployment info file
-    const infoPath = join(cwd, 'target', 'deployment-info.txt');
-    const infoContent = [
-      'Package Information:',
-      '-------------------',
-      `Environment: ${deploymentInfo.environment ?? 'default'}`,
-      `Package Name: ${deploymentInfo.packageName}`,
-      `Build Date: ${deploymentInfo.buildDate}`,
-      `Version: ${deploymentInfo.version}`,
-      `Built By: ${deploymentInfo.builtBy}`,
-      `Machine: ${deploymentInfo.machine}`,
-      '',
-      'Configuration Changes Applied:',
-      ...configChanges.map((c) => `- ${c}`),
-      '',
-      `Original JAR: ${originalJarName}`,
-      `Final Package: ${finalJarName}`,
-    ].join('\n');
-
-    writeFileSync(infoPath, infoContent);
-
-    logger.success(`Package built successfully: ${finalJarName}`);
-
-    return ok({
-      jarPath: finalJarPath,
-      deploymentInfo,
-      metrics: buildResult.data?.metrics,
-    });
+    return ok({ jarPath: finalPath, deploymentInfo, metrics: build.data?.metrics });
+  } catch (error) {
+    return err(error instanceof Error ? error : new Error(String(error)));
   } finally {
-    // Restore pom.xml
-    restorePom(cwd);
-
-    // Clean up pom.xml backup
-    try {
-      const pomBackupPath = join(cwd, 'pom.xml.bak');
-      if (existsSync(pomBackupPath)) {
-        unlinkSync(pomBackupPath);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
-
-    // Restore XML files if they were backed up
-    if (xmlFilesBackedUp) {
-      logger.step('Restoring XML files...');
-      restoreXmlFiles(muleDir, backupDir);
-    }
+    if (stage && existsSync(stage)) rmSync(stage, { recursive: true, force: true });
   }
 }

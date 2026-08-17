@@ -1,24 +1,61 @@
-# @sfdxy/mule-build
+<p align="center">
+  <img src="assets/logo.svg" alt="mule-build" width="600" />
+</p>
 
-Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or MCP server.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/v/@sfdxy/mule-build?style=flat-square&color=34d399" alt="npm version" /></a>
+  <a href="https://github.com/Avinava/mule-build/actions"><img src="https://img.shields.io/github/actions/workflow/status/Avinava/mule-build/ci.yml?style=flat-square&color=38bdf8" alt="CI" /></a>
+  <a href="https://github.com/Avinava/mule-build/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
+</p>
 
-Version 2 fixes the installed-package layout, uses one package version everywhere, requires Node.js 20.19 or newer, validates configuration, resolves a project-compatible Mule runtime, and keeps secure-property transformations out of the source checkout during builds.
+<p align="center">
+  <strong>Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or MCP server.</strong>
+</p>
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete v2 release summary and upgrade notes.
+<p align="center">
+  <a href="https://avinava.github.io/mule-build/">Documentation</a> •
+  <a href="#install">Install</a> •
+  <a href="#commands">Commands</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#mcp-server">MCP</a> •
+  <a href="#ecosystem">Ecosystem</a>
+</p>
+
+---
+
+No Anypoint credentials are required. Deploying a built artifact and reading runtime evidence are a
+different tool's job — see [Ecosystem](#ecosystem).
 
 ## Install
 
 ```bash
-npm install --global @sfdxy/mule-build@2.0.0
+npm install --global @sfdxy/mule-build@2.1.0
 mule-build --version
 mule-build --help
 ```
 
-For CI, prefer `npx -y @sfdxy/mule-build@2.0.0 ...` so the executed version is explicit.
+For CI and shared configuration, prefer `npx -y @sfdxy/mule-build@2.1.0 ...` so the executed version
+is explicit. Examples below omit the pin for readability; add `@2.1.0` anywhere the version should not
+drift.
+
+Requires Node.js `>=20.19.0`, Maven on `PATH`, and a JDK compatible with your Mule runtime. A local
+Mule runtime is needed only for `run`, `status`, and `stop`. Full list in
+[Prerequisites](https://avinava.github.io/mule-build/prerequisites/).
 
 ## Commands
 
-Run commands from a Mule project root or pass `-C /path/to/project`.
+Run from a Mule project root, or pass `-C /path/to/project`.
+
+| Command | Purpose |
+| --- | --- |
+| `doctor` | Diagnose build, run, or release readiness. Read-only |
+| `package` | Build the application. `mvn clean package`, no source rewriting |
+| `run` | Build, start a compatible runtime if needed, and deploy |
+| `status`, `stop` | Inspect or stop the resolved runtime |
+| `enforce` | Fail when sensitive properties omit `secure::` |
+| `strip` | Remove `secure::` prefixes from source. Preview with `--dry-run` |
+| `release` | Version, tag, and push as one transaction |
+| `mcp` | Start the stdio MCP server |
 
 ```bash
 # Diagnose build readiness (runtime is informational here)
@@ -35,7 +72,6 @@ mule-build package --strip-secure
 
 # Build, start a compatible runtime if needed, and deploy
 mule-build run --runtime-home /opt/mule-4.10.2
-mule-build run --debug
 
 # Inspect or stop the selected runtime
 mule-build status --runtime-home /opt/mule-4.10.2
@@ -50,45 +86,28 @@ mule-build release --bump patch --dry-run
 mule-build release --bump patch
 ```
 
-`package --env` remains as a deprecated alias for `--profile`. A profile name is valid only when it exists in `mule-build.yaml` (including the built-in `production` default).
+Every flag is documented in the [CLI reference](https://avinava.github.io/mule-build/cli/).
+`package --env` remains a deprecated alias for `--profile`, and a profile name is valid only when it
+exists in `mule-build.yaml`, including the built-in `production` default.
 
 ## Configuration
 
-Create `mule-build.yaml` in the Mule project root:
+Copy [`mule-build.yaml.example`](mule-build.yaml.example) to `mule-build.yaml` in the Mule project
+root and edit it. That file is the maintained sample; it ships with the package so it is available
+after a global install too.
 
-```yaml
-project:
-  name: orders-api
-
-profiles:
-  local:
-    description: Local artifact
-    mavenProfile: local
-    secureProperties: unchanged
-    includeSource: true
-    enforceGitClean: false
-  production:
-    description: Release artifact
-    mavenProfile: prod
-    secureProperties: enforce
-    includeSource: false
-    enforceGitClean: true
-
-runtime:
-  # home: /opt/mule-enterprise-standalone-4.10.2
-  searchPaths:
-    - ~/muleRuntimes
-  strictVersion: true
-```
-
-Unknown configuration keys and unknown profile names fail early. Runtime selection uses this precedence:
+Unknown configuration keys and unknown profile names fail early rather than being ignored. Runtime
+selection precedence:
 
 1. `--runtime-home` / API `runtimeHome`
 2. `MULE_HOME`
 3. `runtime.home`
-4. a compatible runtime under `MULE_RUNTIMES_DIR`, `runtime.searchPaths`, `~/muleRuntimes`, `~/AnypointStudio/runtimes`, or the standard macOS Anypoint Studio plugins directory
+4. a compatible runtime under `MULE_RUNTIMES_DIR`, `runtime.searchPaths`, `~/muleRuntimes`,
+   `~/AnypointStudio/runtimes`, or the standard macOS Anypoint Studio plugins directory
 
-When `.classpath` declares a Mule runtime, the resolver matches major, minor, and edition. With `strictVersion: true` (the default), it rejects an incompatible fallback.
+When `.classpath` declares a Mule runtime, the resolver matches major, minor, and edition. With
+`strictVersion: true`, the default, it rejects an incompatible fallback instead of building something
+that fails on deployment.
 
 ## Secure properties
 
@@ -98,7 +117,8 @@ Normal builds do not rewrite XML. Profiles may select:
 - `enforce`: fail if sensitive property references omit `secure::`.
 - `strip`: build an isolated staged copy with prefixes and secure-properties config removed.
 
-CLI `--strip-secure` is explicit opt-in and conflicts with a profile that enforces security. `strip` modifies source only when called directly without `--dry-run`; use the preview first.
+CLI `--strip-secure` is explicit opt-in and conflicts with a profile that enforces security. The
+`strip` command modifies source only when called directly without `--dry-run`; use the preview first.
 
 ## JavaScript and TypeScript API
 
@@ -123,61 +143,77 @@ const build = await packageProject({
   cwd: '/workspace/orders-api',
   profile: 'production',
 });
-
-const status = await getRuntimeStatus({
-  cwd: '/workspace/orders-api',
-  runtimeHome: '/opt/mule-enterprise-standalone-4.10.2',
-});
 ```
 
-All operations return `Promise<Result<T>>`; expected operational failures are returned in `result.error`. The supported subpath `@sfdxy/mule-build/api` exports the same high-level APIs.
+All operations return `Promise<Result<T>>`; expected operational failures are returned in
+`result.error` rather than thrown. The supported subpath `@sfdxy/mule-build/api` exports the same
+high-level APIs.
 
 ## MCP server
 
-The stdio server is started with:
-
 ```bash
-npx -y @sfdxy/mule-build@2.0.0 mcp
+npx -y @sfdxy/mule-build mcp
 ```
 
-Codex CLI:
+Every host runs that same command; only the file and the wrapping key differ.
 
-```bash
-codex mcp add mule-build -- npx -y @sfdxy/mule-build@2.0.0 mcp
-codex mcp list
-```
-
-Codex stores this server in its shared MCP configuration, so the CLI, desktop app, and IDE extension can use the same entry. Restart an already-open client after adding the server.
-
-Claude Code user scope:
-
-```bash
-claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@2.0.0 mcp
-claude mcp list
-```
-
-VS Code `.vscode/mcp.json`:
+| Host | Where it goes | Wrapping key |
+| --- | --- | --- |
+| Claude Code | `.mcp.json`, or `claude mcp add --scope user` | `mcpServers` |
+| Codex | `.codex/config.toml`, or `codex mcp add` | `[mcp_servers.mule-build]` |
+| VS Code, Copilot Chat | `.vscode/mcp.json` | `servers`, plus `"type": "stdio"` |
+| Copilot CLI, Gemini, other MCP clients | `.mcp.json` | `mcpServers` |
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "mule-build": {
-      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.0.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.1.0", "mcp"]
     }
   }
 }
 ```
 
-The server exposes these stable v2 tools:
+Nine tools: `run_build`, `run_app`, `stop_runtime`, `check_runtime_status`, `release_version`,
+`enforce_security`, `strip_secure`, `system_check`, `get_project_config`. Two are preview-first —
+`strip_secure` defaults to a dry run, and `release_version` returns a preview unless called with
+`confirm: true`. It also publishes the `quick-start`, `release-checklist`, and `security-audit`
+prompts plus packaged documentation under `mule-build://docs/*`. Logs go to stderr so stdout stays
+protocol-safe.
 
-- `run_build`, `run_app`, `stop_runtime`, `check_runtime_status`
-- `release_version` (preview unless `confirm: true`)
-- `enforce_security`, `strip_secure` (dry-run by default)
-- `system_check`, `get_project_config`
+Per-host examples, the full tool table, and verification commands are in the
+[MCP guide](https://avinava.github.io/mule-build/mcp/).
 
-It also publishes `quick-start`, `release-checklist`, and `security-audit` prompts plus packaged documentation resources under `mule-build://docs/*`. MCP logs go to stderr so stdout remains protocol-safe.
+## Documentation
+
+Published at **<https://avinava.github.io/mule-build/>** with search.
+
+| Document | Contents |
+| --- | --- |
+| [Prerequisites](docs/prerequisites.md) | Machine and project requirements, runtime resolution, CI notes |
+| [CLI reference](docs/cli.md) | Every command and flag |
+| [MCP server](docs/mcp.md) | Host setup, tools, prompts, resources |
+| [Best practices](docs/best-practices.md) | Reproducible builds, secure configuration, releases |
+| [Troubleshooting](docs/troubleshooting.md) | Failure modes and their actual causes |
+| [Design](docs/design.md) | Architecture, safety invariants, packaging model |
+| [Folder structure](docs/folder-structure.md) | Repository and expected project layout |
+
+## Ecosystem
+
+`mule-build` is one of four MuleSoft tools that work together, and each is useful alone.
+
+| Project | Role |
+| --- | --- |
+| `mule-build` | Validate, test, package, run locally, and release |
+| [`mule-lint`](https://github.com/Avinava/mule-lint) | Static analysis of Mule XML, DataWeave, YAML, and project structure |
+| [`anypoint-connect`](https://github.com/Avinava/anypoint-connect) | Authorized Anypoint runtime evidence and lifecycle operations |
+| [`mule-skills`](https://github.com/Avinava/mule-skills) | Agent workflows that drive all three |
+
+`mule-build` stops at the artifact; publishing and deploying it belong to `anypoint-connect`, which is
+why only that tool needs credentials. The `mule-build` skill in `mule-skills` and this MCP server share
+a name but are different things: the skill is the workflow, this provides the tools it calls. Details on
+the [ecosystem page](docs/ecosystem.md).
 
 ## Development
 
@@ -188,10 +224,9 @@ npm run build
 npm run test:package
 ```
 
-The package supports Node.js 20.19, 22, and 24. `npm run test:mcp` runs a real MCP client/server negotiation rather than a constructor smoke test.
-
-See the [changelog](CHANGELOG.md), [design](docs/design.md), [best practices](docs/best-practices.md), and [folder structure](docs/folder-structure.md).
+Supported on Node.js 20.19, 22, and 24. `npm run test:mcp` runs a real MCP client and server
+negotiation rather than a constructor smoke test.
 
 ## License
 
-MIT
+[MIT](LICENSE)

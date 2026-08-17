@@ -1,6 +1,6 @@
 {
   "name": "@sfdxy/mule-build",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "A type-safe CLI and library for MuleSoft application build automation",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,6 +21,7 @@
   "files": [
     "dist",
     "docs",
+    "mule-build.yaml.example",
     "CHANGELOG.md",
     "README.md"
   ],
@@ -59,7 +60,7 @@
   "bugs": {
     "url": "https://github.com/Avinava/mule-build/issues"
   },
-  "homepage": "https://github.com/Avinava/mule-build#readme",
+  "homepage": "https://avinava.github.io/mule-build/",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "chalk": "^6.0.0",

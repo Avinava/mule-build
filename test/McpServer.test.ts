@@ -58,8 +58,11 @@ describe('Mule Build MCP protocol', () => {
     expect(resources.resources.map((resource) => resource.uri).sort()).toEqual(
       [
         'mule-build://docs/best-practices',
+        'mule-build://docs/cli',
         'mule-build://docs/design',
         'mule-build://docs/folder-structure',
+        'mule-build://docs/prerequisites',
+        'mule-build://docs/troubleshooting',
       ].sort()
     );
     for (const resource of resources.resources) {

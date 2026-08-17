@@ -32,7 +32,8 @@
 
 ## MCP clients
 
-- Pin `@sfdxy/mule-build@2.0.0` in the server command.
+- Pin an explicit version in the server command, for example `@sfdxy/mule-build@2.1.0`, so every
+  machine and CI run gets the same build behavior.
 - Keep `release_version` unconfirmed until a human accepts the preview.
 - Keep `strip_secure` in its default dry-run mode unless the user explicitly requests source mutation.
 - Pass `cwd` explicitly when the client workspace can contain multiple Mule projects.

@@ -1,0 +1,88 @@
+site_name: mule-build
+site_description: Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or MCP server.
+site_url: https://avinava.github.io/mule-build/
+site_author: Avi
+copyright: MIT licensed
+
+repo_url: https://github.com/Avinava/mule-build
+repo_name: Avinava/mule-build
+edit_uri: edit/master/docs/
+
+docs_dir: docs
+site_dir: .site
+
+# With `mkdocs build --strict` in CI, these turn a broken cross-link, a missing
+# anchor, or a page left out of the nav into a failed build rather than a warning
+# nobody reads.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+theme:
+  name: material
+  icon:
+    logo: material/package-variant-closed
+    repo: fontawesome/brands/github
+  features:
+    - content.action.edit
+    - content.code.copy
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Using it:
+      - Prerequisites: prerequisites.md
+      - CLI reference: cli.md
+      - MCP server: mcp.md
+      - Best practices: best-practices.md
+      - Troubleshooting: troubleshooting.md
+  - Internals:
+      - Design: design.md
+      - Folder structure: folder-structure.md
+  - Ecosystem: ecosystem.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Avinava/mule-build
+      name: mule-build on GitHub
+    - icon: fontawesome/brands/npm
+      link: https://www.npmjs.com/package/@sfdxy/mule-build
+      name: '@sfdxy/mule-build on npm'

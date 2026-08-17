@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" alt="mule-build" width="600" />
+
 # mule-build
 
 Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or

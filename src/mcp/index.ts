@@ -332,6 +332,9 @@ export class MuleBuildMcpServer {
       design: 'design.md',
       'best-practices': 'best-practices.md',
       'folder-structure': 'folder-structure.md',
+      prerequisites: 'prerequisites.md',
+      troubleshooting: 'troubleshooting.md',
+      cli: 'cli.md',
     } as const;
     this.server.registerResource(
       'docs',

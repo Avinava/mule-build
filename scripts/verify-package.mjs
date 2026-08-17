@@ -38,6 +38,10 @@ try {
     'docs/design.md',
     'docs/best-practices.md',
     'docs/folder-structure.md',
+    'docs/prerequisites.md',
+    'docs/troubleshooting.md',
+    'docs/cli.md',
+    'mule-build.yaml.example',
   ]) {
     if (!filenames.has(required)) throw new Error(`Packed artifact is missing ${required}`);
   }

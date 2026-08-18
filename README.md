@@ -201,19 +201,11 @@ Published at **<https://avinava.github.io/mule-build/>** with search.
 
 ## Ecosystem
 
-`mule-build` is one of four MuleSoft tools that work together, and each is useful alone.
-
-| Project | Role |
-| --- | --- |
-| `mule-build` | Validate, test, package, run locally, and release |
-| [`mule-lint`](https://github.com/Avinava/mule-lint) | Static analysis of Mule XML, DataWeave, YAML, and project structure |
-| [`anypoint-connect`](https://github.com/Avinava/anypoint-connect) | Authorized Anypoint runtime evidence and lifecycle operations |
-| [`mule-skills`](https://github.com/Avinava/mule-skills) | Agent workflows that drive all three |
-
-`mule-build` stops at the artifact; publishing and deploying it belong to `anypoint-connect`, which is
-why only that tool needs credentials. The `mule-build` skill in `mule-skills` and this MCP server share
-a name but are different things: the skill is the workflow, this provides the tools it calls. Details on
-the [ecosystem page](docs/ecosystem.md).
+The canonical package matrix and supported combination live in the
+[`mule-skills` ecosystem hub](https://avinava.github.io/mule-skills/ecosystem/). `mule-build` stops at
+the artifact; publishing and deploying it belong to `anypoint-connect`. The `mule-build` skill is the
+workflow, while this package provides the build tools it calls. More boundary detail is on the local
+[ecosystem page](docs/ecosystem.md).
 
 ## Development
 

@@ -7,6 +7,7 @@
 // Public API functions
 export {
   packageProject,
+  testProject,
   runLocal,
   releaseVersion,
   stripSecure,
@@ -21,6 +22,9 @@ export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from 
 export type {
   PackageOptions,
   PackageResult,
+  TestOptions,
+  TestResult,
+  TestMetrics,
   RunOptions,
   RunResult,
   ReleaseOptions,

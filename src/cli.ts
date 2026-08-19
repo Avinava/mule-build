@@ -7,6 +7,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { packageProject } from './api/package.js';
+import { testProject } from './api/test.js';
 import { runLocal } from './api/run.js';
 import { releaseVersion } from './api/release.js';
 import { stripSecure } from './api/strip.js';
@@ -88,6 +89,44 @@ export function createProgram(): Command {
       }
 
       console.log(chalk.green(`\n✓ Package built successfully: ${result.data?.jarPath}`));
+    });
+
+  // Run command
+  program
+    .command('test')
+    .description('Run full or focused MUnit tests without packaging')
+    .option('-c, --clean', 'Run mvn clean before testing')
+    .option('-p, --profile <profile>', 'Maven profile to activate')
+    .option('--suite <suite>', 'MUnit suite name')
+    .option('--test <test>', 'Test name within the selected suite')
+    .option('--tags <tags>', 'Comma-separated MUnit tags')
+    .action(async (options) => {
+      const result = await testProject({
+        cwd: program.opts().cwd,
+        clean: options.clean,
+        profile: options.profile,
+        suite: options.suite,
+        test: options.test,
+        tags: options.tags?.split(','),
+      });
+      if (!result.success || !result.data) {
+        console.error(chalk.red(`Tests failed: ${result.error?.message}`));
+        if (result.error instanceof BuildError) {
+          for (const line of result.error.diagnostic.relevantLines.slice(0, 15)) {
+            console.error(chalk.dim(`  ${line}`));
+          }
+        }
+        process.exit(1);
+      }
+      const { metrics } = result.data;
+      console.log(
+        chalk.green(
+          `\n✓ Tests passed: ${metrics.testsRun} run, ${metrics.failures} failures, ${metrics.errors} errors, ${metrics.skipped} skipped`
+        )
+      );
+      if (result.data.reportPaths.length > 0) {
+        console.log(chalk.dim(`  Reports: ${result.data.reportPaths.join(', ')}`));
+      }
     });
 
   // Run command
@@ -217,10 +256,10 @@ export function createProgram(): Command {
 
   program
     .command('doctor')
-    .description('Check Mule project build or run readiness')
-    .option('--operation <operation>', 'build | run | release', 'build')
+    .description('Check Mule project build, test, run, or release readiness')
+    .option('--operation <operation>', 'build | test | run | release', 'build')
     .action(async (options) => {
-      if (!['build', 'run', 'release'].includes(options.operation)) {
+      if (!['build', 'test', 'run', 'release'].includes(options.operation)) {
         console.error(chalk.red(`Invalid operation: ${options.operation}`));
         process.exit(1);
       }

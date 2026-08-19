@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Run `mule-build doctor --operation <build|run|release>` first. It reports each required component with
+Run `mule-build doctor --operation <build|test|run|release>` first. It reports each required component with
 a remediation line, which resolves most of what follows without reading further.
 
 ## Project and machine

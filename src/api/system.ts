@@ -6,7 +6,7 @@ import {
 import { getRuntimeStatus as inspectRuntime, stopMuleRuntime } from '../engine/LocalRuntime.js';
 import { Result, RuntimeStatus, RuntimeStatusOptions, StopRuntimeOptions } from '../types/index.js';
 
-/** Return structured readiness diagnostics for a build, run, or release. */
+/** Return structured readiness diagnostics for a build, test, run, or release. */
 export function systemCheck(
   cwd: string = process.cwd(),
   operation: SystemCheckOperation = 'build'

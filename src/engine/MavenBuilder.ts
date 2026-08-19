@@ -44,6 +44,20 @@ export interface MavenBuildOptions {
   cwd?: string;
 }
 
+export interface MavenTestOptions {
+  clean?: boolean;
+  profile?: string;
+  suite?: string;
+  test?: string;
+  tags?: string[];
+  cwd?: string;
+}
+
+export interface MavenTestResult {
+  output: string;
+  durationMs: number;
+}
+
 /**
  * Check if Maven is installed
  */
@@ -84,6 +98,36 @@ export function generateMavenArgs(options: MavenBuildOptions = {}): string[] {
   }
 
   return args;
+}
+
+/** Generate bounded Maven arguments for an MUnit test run. */
+export function generateMavenTestArgs(options: MavenTestOptions = {}): string[] {
+  const args = options.clean ? ['clean', 'test'] : ['test'];
+  if (options.profile) args.push(`-P${options.profile}`);
+  if (options.suite) {
+    args.push(`-Dmunit.test=${options.suite}${options.test ? `#${options.test}` : ''}`);
+  }
+  if (options.tags?.length) args.push(`-Dmunit.tags=${options.tags.join(',')}`);
+  args.push('-B');
+  return args;
+}
+
+/** Run MUnit tests and return captured Maven output for structured parsing. */
+export async function mavenTest(options: MavenTestOptions = {}): Promise<Result<MavenTestResult>> {
+  const cwd = options.cwd ?? process.cwd();
+  const args = generateMavenTestArgs(options);
+  logger.step(`Running: mvn ${args.join(' ')}`);
+  const result = await execWithOutput('mvn', args, { cwd });
+  if (!result.success || !result.data) {
+    return err(result.error ?? new Error('MUnit test execution failed'));
+  }
+  if (result.data.exitCode !== 0) {
+    const diagnostic = parseMavenFailure(result.data.output);
+    return err(
+      new BuildError(`MUnit tests failed: ${diagnostic.summary}`, diagnostic, result.data.output)
+    );
+  }
+  return ok({ output: result.data.output, durationMs: result.data.durationMs });
 }
 
 /**

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0 - 2026-08-19
+
+### Added
+
+- `testProject` and typed test result metrics for full or focused MUnit execution by suite, test, or
+  tags, with discovered report and application-coverage paths.
+- A `test` CLI command, `run_tests` MCP tool, and `doctor --operation test` readiness check.
+
+### Changed
+
+- Test failures retain Maven's actionable diagnostics without suggesting a skipped-test build as a
+  remedy.
+- CLI, API, MCP, troubleshooting, and packaged documentation describe the same test-selection and
+  reporting contract.
+
 ## 2.1.0 - 2026-08-18
 
 Documentation release. No CLI, API, or build behavior changed.

@@ -33,9 +33,13 @@ one, which is why `doctor --operation build` reports runtime state as informatio
 
 ```bash
 mule-build doctor --operation build
+mule-build doctor --operation test
 mule-build doctor --operation run
 mule-build doctor --operation release
 ```
+
+Test readiness additionally requires the `munit-maven-plugin` in `pom.xml`; build and release
+readiness leave it informational because those workflows may use a separate test stage.
 
 ## Runtime resolution
 
@@ -65,8 +69,8 @@ Pin the version so the executed build is explicit, and run `doctor` first so a m
 fails with a readable message instead of a Maven stack trace:
 
 ```yaml
-- run: npx -y @sfdxy/mule-build@2.1.0 doctor --operation build
-- run: npx -y @sfdxy/mule-build@2.1.0 package --profile production
+- run: npx -y @sfdxy/mule-build@2.2.0 doctor --operation build
+- run: npx -y @sfdxy/mule-build@2.2.0 package --profile production
 ```
 
 CI agents rarely have a Mule runtime installed, and they do not need one to package an application.

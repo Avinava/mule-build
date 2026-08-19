@@ -118,6 +118,38 @@ export interface PackageResult {
   metrics?: BuildMetrics;
 }
 
+/** Options for running MUnit tests without packaging or releasing. */
+export interface TestOptions {
+  /** Mule project directory. */
+  cwd?: string;
+  /** Maven profile to activate. */
+  profile?: string;
+  /** Run the Maven clean lifecycle before test. Defaults to false. */
+  clean?: boolean;
+  /** MUnit suite name. */
+  suite?: string;
+  /** Test name within suite. Requires suite. */
+  test?: string;
+  /** MUnit tags. Mutually exclusive with suite/test selection. */
+  tags?: string[];
+}
+
+export interface TestMetrics {
+  durationMs: number;
+  testsRun: number;
+  failures: number;
+  errors: number;
+  skipped: number;
+}
+
+/** Structured result from a focused or full MUnit run. */
+export interface TestResult {
+  metrics: TestMetrics;
+  reportPaths: string[];
+  coverageReportPaths: string[];
+  applicationCoverage?: number;
+}
+
 /**
  * Deployment information generated during packaging
  */

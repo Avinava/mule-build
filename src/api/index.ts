@@ -6,6 +6,7 @@
 
 // API Functions
 export { packageProject } from './package.js';
+export { testProject } from './test.js';
 export { runLocal } from './run.js';
 export { releaseVersion } from './release.js';
 export { stripSecure } from './strip.js';
@@ -17,6 +18,9 @@ export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from 
 export type {
   PackageOptions,
   PackageResult,
+  TestOptions,
+  TestResult,
+  TestMetrics,
   RunOptions,
   RunResult,
   ReleaseOptions,

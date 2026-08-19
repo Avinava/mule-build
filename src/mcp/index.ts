@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { packageProject } from '../api/package.js';
+import { testProject } from '../api/test.js';
 import { releaseVersion } from '../api/release.js';
 import { runLocal } from '../api/run.js';
 import { enforceSecure } from '../api/enforce.js';
@@ -79,6 +80,37 @@ export class MuleBuildMcpServer {
   }
 
   private setupTools(): void {
+    this.server.registerTool(
+      'run_tests',
+      {
+        description: 'Run full or focused MUnit tests without packaging or releasing.',
+        inputSchema: {
+          cwd: z.string().optional(),
+          profile: z.string().optional(),
+          clean: z.boolean().optional(),
+          suite: z.string().optional(),
+          test: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        },
+        outputSchema: OutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+      },
+      async (args) => {
+        const result = await testProject(args);
+        return result.success && result.data
+          ? success(
+              `Tests passed: ${result.data.metrics.testsRun} run, ${result.data.metrics.skipped} skipped`,
+              result.data
+            )
+          : buildFailure(result.error);
+      }
+    );
+
     this.server.registerTool(
       'run_build',
       {
@@ -287,10 +319,10 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'system_check',
       {
-        description: 'Check Mule project readiness for build, run, or release.',
+        description: 'Check Mule project readiness for build, test, run, or release.',
         inputSchema: {
           cwd: z.string().optional(),
-          operation: z.enum(['build', 'run', 'release']).optional(),
+          operation: z.enum(['build', 'test', 'run', 'release']).optional(),
         },
         outputSchema: OutputSchema,
         annotations: readonlyAnnotations,

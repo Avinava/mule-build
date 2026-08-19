@@ -29,13 +29,13 @@ different tool's job — see [Ecosystem](#ecosystem).
 ## Install
 
 ```bash
-npm install --global @sfdxy/mule-build@2.1.0
+npm install --global @sfdxy/mule-build@2.2.0
 mule-build --version
 mule-build --help
 ```
 
-For CI and shared configuration, prefer `npx -y @sfdxy/mule-build@2.1.0 ...` so the executed version
-is explicit. Examples below omit the pin for readability; add `@2.1.0` anywhere the version should not
+For CI and shared configuration, prefer `npx -y @sfdxy/mule-build@2.2.0 ...` so the executed version
+is explicit. Examples below omit the pin for readability; add `@2.2.0` anywhere the version should not
 drift.
 
 Requires Node.js `>=20.19.0`, Maven on `PATH`, and a JDK compatible with your Mule runtime. A local
@@ -48,7 +48,8 @@ Run from a Mule project root, or pass `-C /path/to/project`.
 
 | Command | Purpose |
 | --- | --- |
-| `doctor` | Diagnose build, run, or release readiness. Read-only |
+| `doctor` | Diagnose build, test, run, or release readiness. Read-only |
+| `test` | Run the full MUnit suite or select a suite, test, or tags |
 | `package` | Build the application. `mvn clean package`, no source rewriting |
 | `run` | Build, start a compatible runtime if needed, and deploy |
 | `status`, `stop` | Inspect or stop the resolved runtime |
@@ -125,6 +126,7 @@ CLI `--strip-secure` is explicit opt-in and conflicts with a profile that enforc
 ```ts
 import {
   packageProject,
+  testProject,
   runLocal,
   releaseVersion,
   enforceSecure,
@@ -142,6 +144,11 @@ if (!readiness.success || !readiness.data?.ready) {
 const build = await packageProject({
   cwd: '/workspace/orders-api',
   profile: 'production',
+});
+
+const tests = await testProject({
+  cwd: '/workspace/orders-api',
+  suite: 'orders-api-test-suite',
 });
 ```
 
@@ -169,13 +176,13 @@ Every host runs that same command; only the file and the wrapping key differ.
   "mcpServers": {
     "mule-build": {
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.1.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.2.0", "mcp"]
     }
   }
 }
 ```
 
-Nine tools: `run_build`, `run_app`, `stop_runtime`, `check_runtime_status`, `release_version`,
+Ten tools: `run_tests`, `run_build`, `run_app`, `stop_runtime`, `check_runtime_status`, `release_version`,
 `enforce_security`, `strip_secure`, `system_check`, `get_project_config`. Two are preview-first —
 `strip_secure` defaults to a dry run, and `release_version` returns a preview unless called with
 `confirm: true`. It also publishes the `quick-start`, `release-checklist`, and `security-audit`

@@ -26,13 +26,14 @@ mule-build package
 
 | Capability | Command | Notes |
 | --- | --- | --- |
-| Readiness diagnosis | `doctor` | Reports Maven, POM, plugin, source layout, and runtime state |
+| Readiness diagnosis | `doctor` | Reports Maven, Mule/MUnit plugins, source layout, and runtime state |
+| Test | `test` | Runs all MUnit tests or a focused suite, test, or tag selection |
 | Package | `package` | `mvn clean package` with profile, output, and test control |
 | Local run | `run` | Builds, starts a project-compatible runtime if needed, deploys |
 | Runtime inspection | `status`, `stop` | Acts on the resolved runtime, not a guessed one |
 | Security | `enforce`, `strip` | Enforce `secure::` usage, or stage a stripped copy |
 | Release | `release` | Version, tag, and push as one transaction, preview by default |
-| Agent integration | `mcp` | stdio MCP server exposing nine tools |
+| Agent integration | `mcp` | stdio MCP server exposing ten tools |
 
 ## Design commitments
 
@@ -47,4 +48,4 @@ mule-build package
   operational failures are values you can inspect.
 
 Pin the version in anything shared — CI, MCP configuration, team documentation — so every machine
-runs the same build. The current release is `2.1.0`.
+runs the same build. The current release is `2.2.0`.

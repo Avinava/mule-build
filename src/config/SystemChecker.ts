@@ -6,7 +6,7 @@ import { pomExists } from '../engine/PomParser.js';
 import { resolveRuntime } from '../engine/RuntimeResolver.js';
 import { loadConfig } from './ConfigLoader.js';
 
-export type SystemCheckOperation = 'build' | 'run' | 'release';
+export type SystemCheckOperation = 'build' | 'test' | 'run' | 'release';
 
 export interface SystemCheckDetail {
   component: string;
@@ -23,14 +23,16 @@ export interface SystemCheckResult {
   runtime: boolean;
   pomXml: boolean;
   mulePlugin: boolean;
+  munitPlugin: boolean;
   muleSourceDir: boolean;
   resolvedRuntime?: ResolvedRuntime;
   details: SystemCheckDetail[];
 }
 
-function pomHasMulePlugin(cwd: string): boolean {
+function pomHasPlugin(cwd: string, artifactId: string): boolean {
   try {
-    return /<artifactId>mule-maven-plugin<\/artifactId>/.test(
+    const escaped = artifactId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`<artifactId>\\s*${escaped}\\s*<\\/artifactId>`).test(
       readFileSync(join(cwd, 'pom.xml'), 'utf-8')
     );
   } catch {
@@ -44,7 +46,8 @@ export async function runSystemChecks(
 ): Promise<Result<SystemCheckResult>> {
   const maven = await isMavenInstalled();
   const pomXml = pomExists(cwd);
-  const mulePlugin = pomXml && pomHasMulePlugin(cwd);
+  const mulePlugin = pomXml && pomHasPlugin(cwd, 'mule-maven-plugin');
+  const munitPlugin = pomXml && pomHasPlugin(cwd, 'munit-maven-plugin');
   const muleSourceDir = existsSync(join(cwd, 'src', 'main', 'mule'));
   const runtimeRequired = operation === 'run';
   const config = loadConfig(cwd);
@@ -85,6 +88,15 @@ export async function runSystemChecks(
         : 'Restore the standard src/main/mule project directory.',
     },
     {
+      component: 'munit-maven-plugin',
+      required: operation === 'test',
+      passed: munitPlugin,
+      message: munitPlugin ? 'munit-maven-plugin found' : 'munit-maven-plugin not found in pom.xml',
+      remediation: munitPlugin
+        ? undefined
+        : 'Configure the MUnit Maven plugin before running MUnit tests.',
+    },
+    {
       component: 'runtime',
       required: runtimeRequired,
       passed: runtime,
@@ -105,6 +117,7 @@ export async function runSystemChecks(
     runtime,
     pomXml,
     mulePlugin,
+    munitPlugin,
     muleSourceDir,
     resolvedRuntime: runtimeResult.data,
     details,
@@ -119,6 +132,18 @@ export async function canBuild(cwd: string = process.cwd()): Promise<Result<void
       .map((detail) => detail.message)
       .join('; ');
     return err(checks.error ?? new Error(failures || 'Build requirements not met'));
+  }
+  return ok(undefined);
+}
+
+export async function canTest(cwd: string = process.cwd()): Promise<Result<void>> {
+  const checks = await runSystemChecks(cwd, 'test');
+  if (!checks.success || !checks.data?.ready) {
+    const failures = checks.data?.details
+      .filter((detail) => detail.required && !detail.passed)
+      .map((detail) => detail.message)
+      .join('; ');
+    return err(checks.error ?? new Error(failures || 'Test requirements not met'));
   }
   return ok(undefined);
 }

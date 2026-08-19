@@ -17,13 +17,31 @@ Diagnose whether the project and machine can perform an operation. Read-only.
 
 | Option | Effect |
 | --- | --- |
-| `--operation <operation>` | `build`, `run`, or `release`. Defaults to `build` |
+| `--operation <operation>` | `build`, `test`, `run`, or `release`. Defaults to `build` |
 
 The operation matters: a compatible Mule runtime is required for `run` and informational for `build`.
 See [Prerequisites](prerequisites.md).
 
 ```bash
 mule-build doctor --operation build
+```
+
+## `test`
+
+Run MUnit without packaging, releasing, or accepting arbitrary Maven properties.
+
+| Option | Effect |
+| --- | --- |
+| `-c, --clean` | Run `clean test` instead of `test` |
+| `-p, --profile <profile>` | Activate a Maven profile |
+| `--suite <suite>` | Select one MUnit suite |
+| `--test <test>` | Select one test; requires `--suite` |
+| `--tags <tags>` | Select comma-separated tags; cannot be combined with suite/test |
+
+```bash
+mule-build test
+mule-build test --suite orders-suite --test creates-order
+mule-build test --tags smoke,contract
 ```
 
 ## `package`

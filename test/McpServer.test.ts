@@ -28,6 +28,7 @@ describe('Mule Build MCP protocol', () => {
         'enforce_security',
         'get_project_config',
         'release_version',
+        'run_tests',
         'run_app',
         'run_build',
         'stop_runtime',

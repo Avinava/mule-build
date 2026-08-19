@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { generateMavenArgs, getMavenArgsForEnvironment } from '../src/engine/MavenBuilder.js';
+import {
+  generateMavenArgs,
+  generateMavenTestArgs,
+  getMavenArgsForEnvironment,
+} from '../src/engine/MavenBuilder.js';
 
 describe('MavenBuilder', () => {
   describe('generateMavenArgs', () => {
@@ -67,6 +71,31 @@ describe('MavenBuilder', () => {
       const args = getMavenArgsForEnvironment('production', { profile: 'custom' });
 
       expect(args).toContain('-Pcustom');
+    });
+  });
+
+  describe('generateMavenTestArgs', () => {
+    it('runs the full suite without cleaning by default', () => {
+      expect(generateMavenTestArgs()).toEqual(['test', '-B']);
+    });
+
+    it('selects a suite and test with a profile', () => {
+      expect(
+        generateMavenTestArgs({
+          clean: true,
+          profile: 'ci',
+          suite: 'orders-suite',
+          test: 'success',
+        })
+      ).toEqual(['clean', 'test', '-Pci', '-Dmunit.test=orders-suite#success', '-B']);
+    });
+
+    it('selects comma-separated tags', () => {
+      expect(generateMavenTestArgs({ tags: ['smoke', 'contract'] })).toEqual([
+        'test',
+        '-Dmunit.tags=smoke,contract',
+        '-B',
+      ]);
     });
   });
 });

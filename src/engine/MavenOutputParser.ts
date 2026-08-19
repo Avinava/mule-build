@@ -76,7 +76,6 @@ const SUGGESTIONS: Record<FailureCategory, string[]> = {
   'test-failure': [
     'Review the failing test assertions — the expected vs actual values are shown above',
     'Run `mvn test` standalone to focus on test output',
-    'Use `skipTests: true` to build without tests if you need a quick package',
     'Check if test resource files (mock payloads, configs) are present in src/test/resources',
   ],
   dependency: [

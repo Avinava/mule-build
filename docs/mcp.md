@@ -23,10 +23,10 @@ anything shared so each machine gets the same build behavior.
 Command-line registration, where the host supports it:
 
 ```bash
-codex mcp add mule-build -- npx -y @sfdxy/mule-build@2.1.0 mcp
+codex mcp add mule-build -- npx -y @sfdxy/mule-build@2.2.0 mcp
 codex mcp list
 
-claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@2.1.0 mcp
+claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@2.2.0 mcp
 claude mcp list
 ```
 
@@ -40,7 +40,7 @@ The `mcpServers` form, used by Claude Code, Copilot CLI, and Gemini:
   "mcpServers": {
     "mule-build": {
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.1.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.2.0", "mcp"]
     }
   }
 }
@@ -54,7 +54,7 @@ VS Code wraps the same entry in `servers` and wants an explicit transport:
     "mule-build": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.1.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.2.0", "mcp"]
     }
   }
 }
@@ -70,8 +70,9 @@ working directory is not the project root.
 
 | Tool | Purpose | Mutates |
 | --- | --- | --- |
-| `system_check` | Readiness for `build`, `run`, or `release` | No |
+| `system_check` | Readiness for `build`, `test`, `run`, or `release` | No |
 | `get_project_config` | Read and validate the resolved `mule-build.yaml` | No |
+| `run_tests` | Run full or focused MUnit tests with structured results | Writes test reports |
 | `run_build` | Build a package. Refuses non-Mule projects | Produces an artifact |
 | `run_app` | Build, start a compatible runtime if needed, deploy | Starts a runtime |
 | `check_runtime_status` | Actual status of the resolved runtime | No |

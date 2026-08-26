@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+    <flow name="list-orders-flow" doc:name="List Orders">
+        <set-payload
+            doc:name="Return Sample Orders"
+            mimeType="application/json"
+            value='#[output application/json --- [{ id: "ORD-1001", status: "READY", total: 42.50 }]]' />
+    </flow>
+</mule>

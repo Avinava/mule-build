@@ -23,4 +23,29 @@ describe('testProject', () => {
       )
     ).toEqual({ durationMs: 1200, testsRun: 7, failures: 1, errors: 2, skipped: 3 });
   });
+
+  it('parses the MUnit 3 run summary', () => {
+    expect(
+      parseTestMetrics(
+        'MUnit Run Summary\n >> orders-test-suite.xml test result: Tests: 1, Errors: 0, Failures: 0, Skipped: 0',
+        900
+      )
+    ).toEqual({ durationMs: 900, testsRun: 1, failures: 0, errors: 0, skipped: 0 });
+  });
+
+  it('prefers the MUnit aggregate when multiple suites ran', () => {
+    expect(
+      parseTestMetrics(
+        [
+          'first suite: Tests: 2, Errors: 0, Failures: 0, Skipped: 0',
+          'second suite: Tests: 3, Errors: 1, Failures: 0, Skipped: 1',
+          '> Tests: 5',
+          '> Errors: 1',
+          '> Failures: 0',
+          '> Skipped: 1',
+        ].join('\n'),
+        1500
+      )
+    ).toEqual({ durationMs: 1500, testsRun: 5, failures: 0, errors: 1, skipped: 1 });
+  });
 });

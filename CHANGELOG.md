@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.3.0 - 2026-08-26
+
+### Added
+
+- A MuleSoft-first getting-started path, task recipes, visual site refresh, and copyable agent
+  instruction for Codex, Claude, Copilot, Gemini, and Cursor.
+- A build-clean Mule 4.6 / Java 17 Orders System API sample with one deterministic MUnit test and a CI
+  gate that checks, scans, tests, and packages it.
+- `mule-build://docs/agent-setup`, shipped with the npm package for offline agent guidance.
+- Release-readiness checks for a Git repository and clean working tree, including actionable `doctor`
+  remediation lines.
+
+### Changed
+
+- Package output now shows the artifact path and available Maven test, duration, and warning metrics.
+- Release dry runs are clearly labeled as previews and state the planned tag/push and that no state
+  changed. Direct CLI release and strip mutation behavior remains backward compatible.
+- Documentation now distinguishes local build/version/tag work from Exchange publishing and Anypoint
+  deployment, and explains that Node.js is only the CLI runtime.
+
 ## 2.2.0 - 2026-08-19
 
 ### Added

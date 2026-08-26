@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+    <munit:config name="orders-test-suite.xml" />
+
+    <munit:test name="list-orders-flow-returns-an-order" description="The sample flow returns one predictable order">
+        <munit:execution>
+            <flow-ref name="list-orders-flow" doc:name="Run List Orders" />
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that
+                doc:name="One Order Returned"
+                expression="#[sizeOf(payload)]"
+                is="#[MunitTools::equalTo(1)]" />
+            <munit-tools:assert-that
+                doc:name="Order ID Is Stable"
+                expression="#[payload[0].id]"
+                is="#[MunitTools::equalTo('ORD-1001')]" />
+        </munit:validation>
+    </munit:test>
+</mule>

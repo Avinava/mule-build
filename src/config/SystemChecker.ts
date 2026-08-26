@@ -5,6 +5,7 @@ import { isMavenInstalled } from '../engine/MavenBuilder.js';
 import { pomExists } from '../engine/PomParser.js';
 import { resolveRuntime } from '../engine/RuntimeResolver.js';
 import { loadConfig } from './ConfigLoader.js';
+import { isGitRepo, isWorkingTreeClean } from '../utils/git.js';
 
 export type SystemCheckOperation = 'build' | 'test' | 'run' | 'release';
 
@@ -55,6 +56,9 @@ export async function runSystemChecks(
     ? resolveRuntime({ projectPath: cwd, config: config.data?.runtime })
     : err(config.error ?? new Error('Configuration could not be loaded'));
   const runtime = runtimeResult.success;
+  const releaseRequired = operation === 'release';
+  const gitRepository = releaseRequired ? await isGitRepo(cwd) : false;
+  const cleanWorkingTree = releaseRequired && gitRepository ? await isWorkingTreeClean(cwd) : false;
 
   const details: SystemCheckDetail[] = [
     {
@@ -108,6 +112,29 @@ export async function runSystemChecks(
         : 'Install the project-compatible runtime or configure runtime.home/searchPaths.',
     },
   ];
+
+  if (releaseRequired) {
+    details.push({
+      component: 'git-repository',
+      required: true,
+      passed: gitRepository,
+      message: gitRepository ? 'Git repository found' : 'Git repository not found',
+      remediation: gitRepository
+        ? undefined
+        : 'Run the command from a Git working tree or initialize the project with `git init`.',
+    });
+    details.push({
+      component: 'working-tree',
+      required: true,
+      passed: cleanWorkingTree,
+      message: cleanWorkingTree ? 'Git working tree is clean' : 'Git working tree is not clean',
+      remediation: cleanWorkingTree
+        ? undefined
+        : gitRepository
+          ? 'Commit or stash project changes before releasing.'
+          : 'Create or enter a Git working tree before checking release readiness.',
+    });
+  }
 
   const ready = details.every((detail) => !detail.required || detail.passed);
   return ok({

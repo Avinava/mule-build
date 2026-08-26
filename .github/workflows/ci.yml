@@ -75,6 +75,43 @@ jobs:
           # Run enforce - should fail (exit 1) because password is not secured
           ! node dist/bin/mule-build.js enforce -d test-project2/src/main/mule
 
+  sample-project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Setup Java 17 and Maven cache
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build mule-build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Validate the sample Orders System API
+        run: |
+          SAMPLE=examples/sample-orders-system-api
+          node dist/bin/mule-build.js -C "$SAMPLE" doctor --operation build
+          node dist/bin/mule-build.js -C "$SAMPLE" doctor --operation test
+          node dist/bin/mule-build.js -C "$SAMPLE" enforce
+          node dist/bin/mule-build.js -C "$SAMPLE" test | tee sample-test-output.txt
+          grep -E 'Tests passed: 1 run, 0 failures, 0 errors, 0 skipped' sample-test-output.txt
+          node dist/bin/mule-build.js -C "$SAMPLE" package | tee sample-package-output.txt
+          grep -E 'Package built successfully' sample-package-output.txt
+          test "$(find "$SAMPLE/target" -maxdepth 1 -name 'sample-orders-system-api-*.jar' | wc -l | tr -d ' ')" -ge 1
+
   docs:
     runs-on: ubuntu-latest
 

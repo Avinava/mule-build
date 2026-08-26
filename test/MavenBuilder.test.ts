@@ -4,6 +4,7 @@ import {
   generateMavenTestArgs,
   getMavenArgsForEnvironment,
 } from '../src/engine/MavenBuilder.js';
+import { parseMavenSuccess } from '../src/engine/MavenOutputParser.js';
 
 describe('MavenBuilder', () => {
   describe('generateMavenArgs', () => {
@@ -96,6 +97,17 @@ describe('MavenBuilder', () => {
         '-Dmunit.tags=smoke,contract',
         '-B',
       ]);
+    });
+  });
+
+  describe('parseMavenSuccess', () => {
+    it('includes MUnit 3 totals in package metrics', () => {
+      expect(
+        parseMavenSuccess(
+          '>> orders-test-suite.xml test result: Tests: 1, Errors: 0, Failures: 0, Skipped: 0',
+          1800
+        )
+      ).toMatchObject({ durationMs: 1800, testsRun: 1, testsFailed: 0, testsSkipped: 0 });
     });
   });
 });

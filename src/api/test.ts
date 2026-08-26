@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { canTest } from '../config/SystemChecker.js';
 import { mavenTest } from '../engine/MavenBuilder.js';
 import { Result, TestMetrics, TestOptions, TestResult, err, ok } from '../types/index.js';
+import { parseMavenTestTotals } from '../engine/MavenOutputParser.js';
 
 function collectFiles(root: string): string[] {
   if (!existsSync(root)) return [];
@@ -18,18 +19,13 @@ function collectFiles(root: string): string[] {
 }
 
 export function parseTestMetrics(output: string, durationMs: number): TestMetrics {
-  const matches = [
-    ...output.matchAll(
-      /Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)/g
-    ),
-  ];
-  const summary = matches.at(-1);
+  const totals = parseMavenTestTotals(output);
   return {
     durationMs,
-    testsRun: Number(summary?.[1] ?? 0),
-    failures: Number(summary?.[2] ?? 0),
-    errors: Number(summary?.[3] ?? 0),
-    skipped: Number(summary?.[4] ?? 0),
+    testsRun: totals?.testsRun ?? 0,
+    failures: totals?.failures ?? 0,
+    errors: totals?.errors ?? 0,
+    skipped: totals?.skipped ?? 0,
   };
 }
 

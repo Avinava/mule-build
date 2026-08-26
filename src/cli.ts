@@ -18,6 +18,7 @@ import { BuildError } from './engine/MavenBuilder.js';
 import { runSystemChecks } from './config/SystemChecker.js';
 import { getRuntimeStatus, stopMuleRuntime } from './engine/LocalRuntime.js';
 import { PACKAGE_VERSION } from './version.js';
+import { packageSummaryLines, releaseSummaryLines } from './utils/cliOutput.js';
 
 // Package info
 const NAME = 'mule-build';
@@ -88,7 +89,12 @@ export function createProgram(): Command {
         process.exit(1);
       }
 
-      console.log(chalk.green(`\n✓ Package built successfully: ${result.data?.jarPath}`));
+      const [headline, ...details] = packageSummaryLines(
+        result.data?.jarPath ?? 'target artifact',
+        result.data?.metrics
+      );
+      console.log(chalk.green(`\n✓ ${headline}`));
+      for (const detail of details) console.log(chalk.dim(detail));
     });
 
   // Run command
@@ -195,10 +201,15 @@ export function createProgram(): Command {
         process.exit(1);
       }
 
-      console.log(chalk.green(`\n✓ Released version ${result.data?.newVersion}`));
-      if (result.data?.tagName) {
-        console.log(chalk.blue(`  Tag: ${result.data.tagName}`));
-      }
+      if (!result.data) return;
+      const [headline, ...details] = releaseSummaryLines(result.data, {
+        tag: options.tag,
+        push: options.push,
+      });
+      console.log(
+        result.data.dryRun ? chalk.yellow(`\n${headline}`) : chalk.green(`\n✓ ${headline}`)
+      );
+      for (const detail of details) console.log(chalk.dim(detail));
     });
 
   // Strip command
@@ -272,6 +283,9 @@ export function createProgram(): Command {
         const marker = detail.passed ? '✓' : detail.required ? '✗' : '○';
         const optional = !detail.required && !detail.passed ? ' (optional)' : '';
         console.log(`${marker} ${detail.message}${optional}`);
+        if (!detail.passed && detail.remediation) {
+          console.log(chalk.dim(`  → ${detail.remediation}`));
+        }
       }
       if (!result.data.ready) process.exitCode = 1;
     });

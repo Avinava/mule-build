@@ -60,6 +60,7 @@ describe('Mule Build MCP protocol', () => {
       [
         'mule-build://docs/best-practices',
         'mule-build://docs/cli',
+        'mule-build://docs/agent-setup',
         'mule-build://docs/design',
         'mule-build://docs/folder-structure',
         'mule-build://docs/prerequisites',

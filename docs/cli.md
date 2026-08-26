@@ -134,7 +134,8 @@ never touches your checkout.
 
 ## `release`
 
-Bump the version, tag, and push as one transaction. Previews unless you drop `--dry-run`.
+Bump the version, build the application, commit, tag, and push as one transaction. The direct CLI
+mutates by default for backward compatibility, so run the `--dry-run` form first.
 
 | Option | Effect |
 | --- | --- |
@@ -148,8 +149,10 @@ mule-build release --bump patch --dry-run
 mule-build release --bump patch
 ```
 
-The release targets the current branch and the newly created tag only. It does not push unrelated
-tags, and a profile with `enforceGitClean` refuses to release from a dirty tree.
+The preview prints the old and new versions, planned tag, and push intent, then confirms that no files
+or Git state changed. The real release targets the current branch and newly created tag only; it does
+not push unrelated tags. `doctor --operation release` checks that the project is in a Git repository
+with a clean working tree before you begin.
 
 ## `mcp`
 

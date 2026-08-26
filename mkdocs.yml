@@ -1,5 +1,5 @@
 site_name: mule-build
-site_description: Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or MCP server.
+site_description: Check, test, package, and locally run Mule 4 applications with a MuleSoft-friendly CLI or coding agent.
 site_url: https://avinava.github.io/mule-build/
 site_author: Avi
 copyright: MIT licensed
@@ -51,6 +51,9 @@ theme:
         icon: material/weather-sunny
         name: Switch to light mode
 
+extra_css:
+  - stylesheets/extra.css
+
 markdown_extensions:
   - admonition
   - attr_list
@@ -67,8 +70,12 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Using it:
+  - Get started:
+      - Install and first build: getting-started.md
       - Prerequisites: prerequisites.md
+      - Recipes: recipes.md
+      - Agent setup: agent-setup.md
+  - Reference:
       - CLI reference: cli.md
       - MCP server: mcp.md
       - Best practices: best-practices.md

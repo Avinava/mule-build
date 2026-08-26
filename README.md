@@ -1,230 +1,131 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="mule-build" width="600" />
+  <img src="docs/assets/logo.svg" alt="mule-build" width="560" />
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@sfdxy/mule-build"><img src="https://img.shields.io/npm/v/@sfdxy/mule-build?style=flat-square&color=34d399" alt="npm version" /></a>
   <a href="https://github.com/Avinava/mule-build/actions"><img src="https://img.shields.io/github/actions/workflow/status/Avinava/mule-build/ci.yml?style=flat-square&color=38bdf8" alt="CI" /></a>
-  <a href="https://github.com/Avinava/mule-build/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
 </p>
 
-<p align="center">
-  <strong>Build, validate, release, and locally run Mule 4 applications from one typed CLI, JavaScript API, or MCP server.</strong>
-</p>
+<p align="center"><strong>A familiar build path for MuleSoft projects: check, test, package.</strong></p>
 
-<p align="center">
-  <a href="https://avinava.github.io/mule-build/">Documentation</a> •
-  <a href="#install">Install</a> •
-  <a href="#commands">Commands</a> •
-  <a href="#configuration">Configuration</a> •
-  <a href="#mcp-server">MCP</a> •
-  <a href="#ecosystem">Ecosystem</a>
-</p>
+`mule-build` wraps the Maven and Mule operations you already use. Node.js is only the small runtime
+that starts the command; you do not need to write JavaScript or understand a Node project.
 
----
+## Install and build
 
-No Anypoint credentials are required. Deploying a built artifact and reading runtime evidence are a
-different tool's job — see [Ecosystem](#ecosystem).
-
-## Install
+You need Node.js 20.19 or newer, Maven, and a JDK supported by your Mule runtime.
 
 ```bash
-npm install --global @sfdxy/mule-build@2.2.0
-mule-build --version
-mule-build --help
+npm install --global @sfdxy/mule-build@2.3.0
+cd my-mule-application
+mule-build doctor --operation test
+mule-build test
+mule-build package
 ```
 
-For CI and shared configuration, prefer `npx -y @sfdxy/mule-build@2.2.0 ...` so the executed version
-is explicit. Examples below omit the pin for readability; add `@2.2.0` anywhere the version should not
-drift.
+Expected finish:
 
-Requires Node.js `>=20.19.0`, Maven on `PATH`, and a JDK compatible with your Mule runtime. A local
-Mule runtime is needed only for `run`, `status`, and `stop`. Full list in
-[Prerequisites](https://avinava.github.io/mule-build/prerequisites/).
+```text
+✓ Package built successfully
+  Artifact: .../target/my-mule-application-1.0.0-2026-08-26T09-30-00.jar
+  Tests: 12 run, 0 failed, 0 skipped
+  Duration: 18.4s
+  Maven warnings: 0
+```
 
-## Commands
+The JAR stays in `target/`. `mule-build` does not publish to Exchange or deploy to CloudHub; use
+[`anypoint-connect`](https://avinava.github.io/anypoint-connect/) for those Anypoint operations.
 
-Run from a Mule project root, or pass `-C /path/to/project`.
+## Pick your path
 
-| Command | Purpose |
+| If you are… | Start with… |
 | --- | --- |
-| `doctor` | Diagnose build, test, run, or release readiness. Read-only |
-| `test` | Run the full MUnit suite or select a suite, test, or tags |
-| `package` | Build the application. `mvn clean package`, no source rewriting |
-| `run` | Build, start a compatible runtime if needed, and deploy |
-| `status`, `stop` | Inspect or stop the resolved runtime |
-| `enforce` | Fail when sensitive properties omit `secure::` |
-| `strip` | Remove `secure::` prefixes from source. Preview with `--dry-run` |
-| `release` | Version, tag, and push as one transaction |
-| `mcp` | Start the stdio MCP server |
+| A MuleSoft developer | [Getting started](https://avinava.github.io/mule-build/getting-started/) and the [sample Orders API](examples/sample-orders-system-api/) |
+| Working on MUnit | [Test and package recipes](https://avinava.github.io/mule-build/recipes/) |
+| Building CI or releases | [Safe release and CI recipes](https://avinava.github.io/mule-build/recipes/#ci-build) |
+| Using Codex, Claude, Copilot, Gemini, or Cursor | [Agent setup](https://avinava.github.io/mule-build/agent-setup/) |
+| Looking up flags | [CLI reference](https://avinava.github.io/mule-build/cli/) |
+
+## Commands in Mule terms
+
+| Command | What it means |
+| --- | --- |
+| `doctor` | Check Maven, POM, Mule/MUnit plugins, source layout, runtime, or Git readiness |
+| `test` | Run all MUnit tests or select a suite, test, or tags |
+| `package` | Run the Mule Maven package lifecycle and copy the final JAR to `target/` |
+| `enforce` | Find sensitive properties that do not use `secure::` |
+| `run` | Build and deploy to a compatible Mule runtime on your machine |
+| `status`, `stop` | Inspect or stop that resolved local runtime |
+| `release` | Change the POM version, build, commit, tag, and optionally push |
+| `strip` | Directly remove `secure::` prefixes from source XML |
+| `mcp` | Let an MCP-capable coding agent call the same operations |
+
+`doctor`, `enforce`, `status`, and release `--dry-run` are read-only. Direct `strip` and direct
+`release` mutate by default; preview them with `--dry-run`. `package --strip-secure` is different: it
+uses an isolated temporary copy and does not edit your source.
+
+## Common examples
 
 ```bash
-# Diagnose build readiness (runtime is informational here)
+# Build readiness; a local Mule runtime is not required
 mule-build doctor --operation build
 
-# Safe default build: mvn clean package
+# One MUnit test
+mule-build test --suite orders-test-suite --test list-orders-flow-returns-an-order
+
+# Normal artifact
 mule-build package
 
-# Apply a named mule-build.yaml profile
+# Production policy from mule-build.yaml
 mule-build package --profile production
 
-# Build from an isolated copy with secure:: removed; source is unchanged
-mule-build package --strip-secure
-
-# Build, start a compatible runtime if needed, and deploy
-mule-build run --runtime-home /opt/mule-4.10.2
-
-# Inspect or stop the selected runtime
-mule-build status --runtime-home /opt/mule-4.10.2
-mule-build stop --runtime-home /opt/mule-4.10.2
-
-# Security operations
-mule-build enforce
-mule-build strip --dry-run
-
-# Preview before mutating POM/git state
+# Release preview: no POM, commit, tag, or remote changes
+mule-build doctor --operation release
 mule-build release --bump patch --dry-run
-mule-build release --bump patch
 ```
 
-Every flag is documented in the [CLI reference](https://avinava.github.io/mule-build/cli/).
-`package --env` remains a deprecated alias for `--profile`, and a profile name is valid only when it
-exists in `mule-build.yaml`, including the built-in `production` default.
-
-## Configuration
-
-Copy [`mule-build.yaml.example`](mule-build.yaml.example) to `mule-build.yaml` in the Mule project
-root and edit it. That file is the maintained sample; it ships with the package so it is available
-after a global install too.
-
-Unknown configuration keys and unknown profile names fail early rather than being ignored. Runtime
-selection precedence:
-
-1. `--runtime-home` / API `runtimeHome`
-2. `MULE_HOME`
-3. `runtime.home`
-4. a compatible runtime under `MULE_RUNTIMES_DIR`, `runtime.searchPaths`, `~/muleRuntimes`,
-   `~/AnypointStudio/runtimes`, or the standard macOS Anypoint Studio plugins directory
-
-When `.classpath` declares a Mule runtime, the resolver matches major, minor, and edition. With
-`strictVersion: true`, the default, it rejects an incompatible fallback instead of building something
-that fails on deployment.
-
-## Secure properties
-
-Normal builds do not rewrite XML. Profiles may select:
-
-- `unchanged`: build source as-is.
-- `enforce`: fail if sensitive property references omit `secure::`.
-- `strip`: build an isolated staged copy with prefixes and secure-properties config removed.
-
-CLI `--strip-secure` is explicit opt-in and conflicts with a profile that enforces security. The
-`strip` command modifies source only when called directly without `--dry-run`; use the preview first.
-
-## JavaScript and TypeScript API
-
-```ts
-import {
-  packageProject,
-  testProject,
-  runLocal,
-  releaseVersion,
-  enforceSecure,
-  stripSecure,
-  systemCheck,
-  getRuntimeStatus,
-  stopRuntime,
-} from '@sfdxy/mule-build';
-
-const readiness = await systemCheck('/workspace/orders-api', 'run');
-if (!readiness.success || !readiness.data?.ready) {
-  throw readiness.error ?? new Error('Project is not ready');
-}
-
-const build = await packageProject({
-  cwd: '/workspace/orders-api',
-  profile: 'production',
-});
-
-const tests = await testProject({
-  cwd: '/workspace/orders-api',
-  suite: 'orders-api-test-suite',
-});
-```
-
-All operations return `Promise<Result<T>>`; expected operational failures are returned in
-`result.error` rather than thrown. The supported subpath `@sfdxy/mule-build/api` exports the same
-high-level APIs.
-
-## MCP server
+For CI and agent configuration, pin the command so every machine runs the same release:
 
 ```bash
-npx -y @sfdxy/mule-build mcp
+npx -y @sfdxy/mule-build@2.3.0 doctor --operation build
+npx -y @sfdxy/mule-build@2.3.0 package
 ```
 
-Every host runs that same command; only the file and the wrapping key differ.
+## MCP and JavaScript API
 
-| Host | Where it goes | Wrapping key |
-| --- | --- | --- |
-| Claude Code | `.mcp.json`, or `claude mcp add --scope user` | `mcpServers` |
-| Codex | `.codex/config.toml`, or `codex mcp add` | `[mcp_servers.mule-build]` |
-| VS Code, Copilot Chat | `.vscode/mcp.json` | `servers`, plus `"type": "stdio"` |
-| Copilot CLI, Gemini, other MCP clients | `.mcp.json` | `mcpServers` |
+The MCP server exposes ten stable tools and packaged guidance:
 
-```json
-{
-  "mcpServers": {
-    "mule-build": {
-      "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.2.0", "mcp"]
-    }
-  }
-}
+```bash
+npx -y @sfdxy/mule-build@2.3.0 mcp
 ```
 
-Ten tools: `run_tests`, `run_build`, `run_app`, `stop_runtime`, `check_runtime_status`, `release_version`,
-`enforce_security`, `strip_secure`, `system_check`, `get_project_config`. Two are preview-first —
-`strip_secure` defaults to a dry run, and `release_version` returns a preview unless called with
-`confirm: true`. It also publishes the `quick-start`, `release-checklist`, and `security-audit`
-prompts plus packaged documentation under `mule-build://docs/*`. Logs go to stderr so stdout stays
-protocol-safe.
+MCP `release_version` and `strip_secure` are preview-first. They require an explicit agent-side
+confirmation before changing files or Git state. See [Agent setup](docs/agent-setup.md) for a prompt
+you can paste into Codex, Claude, Copilot, Gemini, or Cursor and [MCP](docs/mcp.md) for host-specific
+configuration.
 
-Per-host examples, the full tool table, and verification commands are in the
-[MCP guide](https://avinava.github.io/mule-build/mcp/).
+For TypeScript callers:
 
-## Documentation
+```ts
+import { packageProject, systemCheck, testProject } from '@sfdxy/mule-build';
 
-Published at **<https://avinava.github.io/mule-build/>** with search.
+const readiness = await systemCheck('/workspace/orders-api', 'test');
+const tests = await testProject({ cwd: '/workspace/orders-api' });
+const artifact = await packageProject({ cwd: '/workspace/orders-api' });
+```
 
-| Document | Contents |
-| --- | --- |
-| [Prerequisites](docs/prerequisites.md) | Machine and project requirements, runtime resolution, CI notes |
-| [CLI reference](docs/cli.md) | Every command and flag |
-| [MCP server](docs/mcp.md) | Host setup, tools, prompts, resources |
-| [Best practices](docs/best-practices.md) | Reproducible builds, secure configuration, releases |
-| [Troubleshooting](docs/troubleshooting.md) | Failure modes and their actual causes |
-| [Design](docs/design.md) | Architecture, safety invariants, packaging model |
-| [Folder structure](docs/folder-structure.md) | Repository and expected project layout |
-
-## Ecosystem
-
-The canonical package matrix and supported combination live in the
-[`mule-skills` ecosystem hub](https://avinava.github.io/mule-skills/ecosystem/). `mule-build` stops at
-the artifact; publishing and deploying it belong to `anypoint-connect`. The `mule-build` skill is the
-workflow, while this package provides the build tools it calls. More boundary detail is on the local
-[ecosystem page](docs/ecosystem.md).
+All APIs return `Promise<Result<T>>`. Expected build failures are available in `result.error`.
 
 ## Development
 
 ```bash
 npm ci
 npm run verify
-npm run build
-npm run test:package
 ```
 
-Supported on Node.js 20.19, 22, and 24. `npm run test:mcp` runs a real MCP client and server
-negotiation rather than a constructor smoke test.
+Supported on Node.js 20.19, 22, and 24. Repository agent rules are in [AGENTS.md](AGENTS.md).
 
 ## License
 

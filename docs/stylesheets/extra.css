@@ -1,0 +1,60 @@
+:root {
+  --mb-ink: #101828;
+  --mb-blue: #2369d8;
+  --mb-mint: #22c59a;
+}
+
+.hero {
+  margin: 0 0 2rem;
+  padding: 2.2rem;
+  border: 1px solid color-mix(in srgb, var(--mb-blue) 20%, transparent);
+  border-radius: 1.2rem;
+  background:
+    radial-gradient(circle at 90% 10%, rgb(34 197 154 / 18%), transparent 34%),
+    linear-gradient(135deg, rgb(35 105 216 / 10%), transparent 65%);
+}
+
+.hero h1 {
+  max-width: 18ch;
+  margin-top: 0.5rem;
+  color: var(--mb-ink);
+  font-weight: 760;
+  letter-spacing: -0.03em;
+}
+
+[data-md-color-scheme="slate"] .hero h1 {
+  color: #f8fafc;
+}
+
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.path-card {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgb(128 128 128 / 24%);
+  border-radius: 0.8rem;
+  background: rgb(255 255 255 / 4%);
+}
+
+.path-card h3 {
+  margin-top: 0;
+}
+
+.md-typeset .md-button--primary {
+  border-color: var(--mb-blue);
+  background: var(--mb-blue);
+}
+
+@media screen and (max-width: 48rem) {
+  .hero {
+    padding: 1.4rem;
+  }
+
+  .path-grid {
+    grid-template-columns: 1fr;
+  }
+}

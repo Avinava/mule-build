@@ -41,6 +41,7 @@ try {
     'docs/prerequisites.md',
     'docs/troubleshooting.md',
     'docs/cli.md',
+    'docs/agent-setup.md',
     'mule-build.yaml.example',
   ]) {
     if (!filenames.has(required)) throw new Error(`Packed artifact is missing ${required}`);

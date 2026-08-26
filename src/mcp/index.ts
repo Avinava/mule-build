@@ -367,6 +367,7 @@ export class MuleBuildMcpServer {
       prerequisites: 'prerequisites.md',
       troubleshooting: 'troubleshooting.md',
       cli: 'cli.md',
+      'agent-setup': 'agent-setup.md',
     } as const;
     this.server.registerResource(
       'docs',

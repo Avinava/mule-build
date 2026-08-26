@@ -23,10 +23,10 @@ anything shared so each machine gets the same build behavior.
 Command-line registration, where the host supports it:
 
 ```bash
-codex mcp add mule-build -- npx -y @sfdxy/mule-build@2.2.0 mcp
+codex mcp add mule-build -- npx -y @sfdxy/mule-build@2.3.0 mcp
 codex mcp list
 
-claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@2.2.0 mcp
+claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@2.3.0 mcp
 claude mcp list
 ```
 
@@ -40,7 +40,7 @@ The `mcpServers` form, used by Claude Code, Copilot CLI, and Gemini:
   "mcpServers": {
     "mule-build": {
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.2.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.3.0", "mcp"]
     }
   }
 }
@@ -54,7 +54,7 @@ VS Code wraps the same entry in `servers` and wants an explicit transport:
     "mule-build": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.2.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@2.3.0", "mcp"]
     }
   }
 }
@@ -105,11 +105,12 @@ mule-build://docs/folder-structure
 mule-build://docs/prerequisites
 mule-build://docs/troubleshooting
 mule-build://docs/cli
+mule-build://docs/agent-setup
 ```
 
 These are the same files published on this site, shipped inside the npm package, so an agent can read
-them with no network access. Do not rename them — the resource slugs and the package verification both
-depend on those paths.
+them with no network access. `agent-setup` contains the guarded multi-host runbook. Do not rename the
+resources — their slugs and the package verification both depend on those paths.
 
 ## Using it through mule-skills
 

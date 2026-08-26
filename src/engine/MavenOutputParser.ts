@@ -17,6 +17,13 @@ export interface MavenDiagnostic {
   suggestions: string[];
 }
 
+export interface ParsedTestTotals {
+  testsRun: number;
+  failures: number;
+  errors: number;
+  skipped: number;
+}
+
 const MAX_RELEVANT_LINES = 30;
 
 const PATTERNS: Record<FailureCategory, RegExp[]> = {
@@ -221,6 +228,54 @@ export function parseMavenFailure(output: string): MavenDiagnostic {
   };
 }
 
+export function parseMavenTestTotals(output: string): ParsedTestTotals | undefined {
+  const lastCounter = (label: string): number | undefined => {
+    const matches = [...output.matchAll(new RegExp(`>\\s*${label}:\\s*(\\d+)`, 'g'))];
+    const value = matches.at(-1)?.[1];
+    return value === undefined ? undefined : Number(value);
+  };
+  const aggregate = {
+    testsRun: lastCounter('Tests'),
+    errors: lastCounter('Errors'),
+    failures: lastCounter('Failures'),
+    skipped: lastCounter('Skipped'),
+  };
+  if (Object.values(aggregate).every((value) => value !== undefined)) {
+    return aggregate as ParsedTestTotals;
+  }
+
+  const munitMatches = [
+    ...output.matchAll(
+      /Tests:\s*(\d+),\s*Errors:\s*(\d+),\s*Failures:\s*(\d+),\s*Skipped:\s*(\d+)/g
+    ),
+  ];
+  if (munitMatches.length > 0) {
+    return munitMatches.reduce<ParsedTestTotals>(
+      (totals, match) => ({
+        testsRun: totals.testsRun + Number(match[1]),
+        errors: totals.errors + Number(match[2]),
+        failures: totals.failures + Number(match[3]),
+        skipped: totals.skipped + Number(match[4]),
+      }),
+      { testsRun: 0, failures: 0, errors: 0, skipped: 0 }
+    );
+  }
+
+  const mavenMatches = [
+    ...output.matchAll(
+      /Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)/g
+    ),
+  ];
+  const summary = mavenMatches.at(-1);
+  if (!summary) return undefined;
+  return {
+    testsRun: Number(summary[1]),
+    failures: Number(summary[2]),
+    errors: Number(summary[3]),
+    skipped: Number(summary[4]),
+  };
+}
+
 export function parseMavenSuccess(output: string, durationMs?: number): BuildMetrics {
   const metrics: BuildMetrics = {};
 
@@ -228,13 +283,11 @@ export function parseMavenSuccess(output: string, durationMs?: number): BuildMet
     metrics.durationMs = durationMs;
   }
 
-  const testMatch = output.match(
-    /Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)/
-  );
-  if (testMatch) {
-    metrics.testsRun = parseInt(testMatch[1]);
-    metrics.testsFailed = parseInt(testMatch[2]) + parseInt(testMatch[3]);
-    metrics.testsSkipped = parseInt(testMatch[4]);
+  const testTotals = parseMavenTestTotals(output);
+  if (testTotals) {
+    metrics.testsRun = testTotals.testsRun;
+    metrics.testsFailed = testTotals.failures + testTotals.errors;
+    metrics.testsSkipped = testTotals.skipped;
   }
 
   const warningLines = output.split('\n').filter((l) => l.includes('[WARNING]'));

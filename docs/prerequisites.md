@@ -11,7 +11,7 @@ is what a Mule build needs.
 | Maven on `PATH` | Every build, package, test, and release | `doctor` runs `mvn` and reports whether it resolved |
 | A JDK compatible with your Mule runtime | Maven and the Mule runtime itself | Not checked directly — Maven fails first if it is absent or wrong |
 | A Mule runtime distribution | `run`, `status`, and `stop` only | Resolved by version match; see below |
-| Git | `release`, and profiles with `enforceGitClean` | Fails with a clear message when absent |
+| Git | `release`, and profiles with `enforceGitClean` | `doctor --operation release` checks the repository and clean working tree |
 
 Java is deliberately not a separate check. Maven cannot start without a usable JDK, so a Java problem
 surfaces as a Maven failure with the real message rather than a second guess from this tool. Match the
@@ -69,8 +69,8 @@ Pin the version so the executed build is explicit, and run `doctor` first so a m
 fails with a readable message instead of a Maven stack trace:
 
 ```yaml
-- run: npx -y @sfdxy/mule-build@2.2.0 doctor --operation build
-- run: npx -y @sfdxy/mule-build@2.2.0 package --profile production
+- run: npx -y @sfdxy/mule-build@2.3.0 doctor --operation build
+- run: npx -y @sfdxy/mule-build@2.3.0 package --profile production
 ```
 
 CI agents rarely have a Mule runtime installed, and they do not need one to package an application.

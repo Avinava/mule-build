@@ -69,8 +69,8 @@ Pin the version so the executed build is explicit, and run `doctor` first so a m
 fails with a readable message instead of a Maven stack trace:
 
 ```yaml
-- run: npx -y @sfdxy/mule-build@2.3.0 doctor --operation build
-- run: npx -y @sfdxy/mule-build@2.3.0 package --profile production
+- run: npx -y @sfdxy/mule-build@3.0.0 doctor --operation build
+- run: npx -y @sfdxy/mule-build@3.0.0 package --profile production
 ```
 
 CI agents rarely have a Mule runtime installed, and they do not need one to package an application.

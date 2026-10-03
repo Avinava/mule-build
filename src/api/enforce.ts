@@ -51,7 +51,9 @@ export async function enforceSecure(options: EnforceOptions = {}): Promise<Resul
   logger.info(`Checked ${data.filesChecked.length} files`);
 
   if (data.valid) {
-    logger.success('All sensitive properties are properly secured');
+    logger.success(
+      'No unsecured references matched the configured property-name patterns; this is not a complete security assessment'
+    );
   } else {
     logger.error(`Found ${data.violations.length} unsecured sensitive properties:`);
     for (const v of data.violations) {

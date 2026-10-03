@@ -55,7 +55,7 @@ Build the application. Safe by default: `mvn clean package` with no source rewri
 | `--strip-secure` | Build from an isolated copy with `secure::` prefixes removed. Explicit opt-in |
 | `-s, --with-source` | Include source in the artifact, making it Studio-importable |
 | `-S, --skip-tests` | Skip MUnit tests. State the resulting gap when you use it |
-| `--version <version>` | Override the artifact version for this build only |
+| `--version <version>` | Set the version in an isolated POM copy and verify the packaged Maven version; source POM unchanged |
 | `-o, --output <path>` | Output directory for the built JAR. Defaults to `target/` |
 
 ```bash
@@ -166,3 +166,15 @@ mule-build mcp
 
 Commands exit non-zero on failure and print the first actionable cause. `enforce` exits non-zero when
 it finds an unsecured property, which is the intended CI signal rather than an error in the tool.
+
+### Artifact handoff
+
+A successful package verifies the embedded Maven coordinates and returns `artifact` with `groupId`,
+`artifactId`, `version`, and `sha256` alongside `jarPath` in the API/MCP result. The CLI prints the
+verified Maven coordinates and SHA-256 in its build summary. The filename is a display label, not
+an Exchange asset identity. Pass the verified artifact ID, version, and digest explicitly to the
+publication preview. Exchange group IDs may differ from the Maven group; review that mapping.
+Missing or ambiguous Maven metadata and a packaged version mismatch fail the build result.
+
+Secure-reference enforcement checks configured property-name patterns only. It does not prove that
+all credentials are secure and does not replace the broader lint security assessment.

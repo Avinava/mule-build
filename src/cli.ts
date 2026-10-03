@@ -91,7 +91,8 @@ export function createProgram(): Command {
 
       const [headline, ...details] = packageSummaryLines(
         result.data?.jarPath ?? 'target artifact',
-        result.data?.metrics
+        result.data?.metrics,
+        result.data?.artifact
       );
       console.log(chalk.green(`\n✓ ${headline}`));
       for (const detail of details) console.log(chalk.dim(detail));
@@ -258,7 +259,11 @@ export function createProgram(): Command {
       }
 
       if (result.data?.valid) {
-        console.log(chalk.green('\n✓ All sensitive properties are properly secured'));
+        console.log(
+          chalk.green(
+            '\n✓ No unsecured references matched the configured property-name patterns; this is not a complete security assessment'
+          )
+        );
       } else {
         console.log(chalk.red(`\n✗ Found ${result.data?.violations.length} unsecured properties`));
         process.exit(1);

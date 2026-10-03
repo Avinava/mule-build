@@ -61,13 +61,13 @@ Pin the version and keep the stages visible:
 
 ```yaml
 - name: Check Mule build prerequisites
-  run: npx -y @sfdxy/mule-build@2.3.0 doctor --operation test
+  run: npx -y @sfdxy/mule-build@3.0.0 doctor --operation test
 - name: Enforce secure property references
-  run: npx -y @sfdxy/mule-build@2.3.0 enforce
+  run: npx -y @sfdxy/mule-build@3.0.0 enforce
 - name: Run MUnit
-  run: npx -y @sfdxy/mule-build@2.3.0 test
+  run: npx -y @sfdxy/mule-build@3.0.0 test
 - name: Package
-  run: npx -y @sfdxy/mule-build@2.3.0 package --skip-tests
+  run: npx -y @sfdxy/mule-build@3.0.0 package --skip-tests
 ```
 
 The last step deliberately skips a second test run because the preceding step already ran MUnit.

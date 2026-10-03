@@ -2,8 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { releaseVersion } from '../src/api/release.js';
+
+vi.mock('../src/engine/MavenBuilder.js', async (original) => ({
+  ...(await original<typeof import('../src/engine/MavenBuilder.js')>()),
+  isMavenInstalled: vi.fn(async () => true),
+}));
 
 describe('releaseVersion preview', () => {
   const projects: string[] = [];

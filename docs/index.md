@@ -57,7 +57,7 @@ flowchart LR
 ```
 
 ```bash
-npm install --global @sfdxy/mule-build@2.3.0
+npm install --global @sfdxy/mule-build@3.0.0
 cd my-mule-application
 mule-build doctor --operation test
 mule-build test

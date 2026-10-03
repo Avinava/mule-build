@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 - 2026-10-03
 
 ### Changed
 
@@ -12,6 +12,17 @@
   for a reviewed publication handoff. Missing, ambiguous, invalid, or mismatched identity fails.
 - Secure-reference checks describe their configured pattern scope without implying a full security
   assessment.
+
+### Migration from 2.x
+
+- TypeScript consumers must provide the required `PackageResult.artifact` identity when constructing
+  package results or mocks. Read its embedded Maven coordinates and SHA-256 for publication handoffs.
+- Packaging now requires unambiguous, valid embedded Maven coordinates matching the requested version.
+  Rebuild legacy artifacts with Maven metadata rather than relying on a filename-derived identity.
+- Version overrides now change the isolated staged POM and packaged artifact bytes, rather than only
+  renaming the output file. Source-project files remain unchanged.
+- Version-override and secure-strip staged builds reject symlinks. Replace linked project inputs with
+  ordinary files or directories before using these staging operations.
 
 ## 2.3.0 - 2026-08-26
 

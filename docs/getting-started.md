@@ -18,12 +18,12 @@ See [Prerequisites](prerequisites.md) if either command is missing.
 ## 2. Install mule-build
 
 ```bash
-npm install --global @sfdxy/mule-build@2.3.0
+npm install --global @sfdxy/mule-build@3.0.0
 mule-build --version
 ```
 
 If your team does not allow global installs, replace `mule-build` with
-`npx -y @sfdxy/mule-build@2.3.0` in every example.
+`npx -y @sfdxy/mule-build@3.0.0` in every example.
 
 ## 3. Open a terminal in the Mule project
 

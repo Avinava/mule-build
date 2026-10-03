@@ -13,7 +13,7 @@ mule-maven-plugin, and src/main/mule. Check for existing Mule Skills instruction
 mule-build skill), AGENTS.md/CLAUDE.md/copilot instructions, and existing MCP configuration before
 adding anything. Reuse compatible configuration and do not create duplicate mule-build entries.
 
-Use @sfdxy/mule-build@2.3.0. Begin with read-only checks:
+Use @sfdxy/mule-build@3.0.0. Begin with read-only checks:
 1. run doctor for the operation I requested;
 2. run enforce and explain any finding without printing secret values;
 3. show the exact commands and expected file or runtime effects before continuing.
@@ -34,7 +34,7 @@ separate anypoint-connect step with its own preview and approval.
 The server command is identical for every MCP-capable host:
 
 ```bash
-npx -y @sfdxy/mule-build@2.3.0 mcp
+npx -y @sfdxy/mule-build@3.0.0 mcp
 ```
 
 Before adding it, ask the agent to inspect the host's existing MCP configuration and update an
@@ -45,7 +45,7 @@ existing `mule-build` entry when present. A generic `.mcp.json` entry is:
   "mcpServers": {
     "mule-build": {
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@2.3.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@3.0.0", "mcp"]
     }
   }
 }

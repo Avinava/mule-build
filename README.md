@@ -18,7 +18,7 @@ that starts the command; you do not need to write JavaScript or understand a Nod
 You need Node.js 20.19 or newer, Maven, and a JDK supported by your Mule runtime.
 
 ```bash
-npm install --global @sfdxy/mule-build@2.3.0
+npm install --global @sfdxy/mule-build@3.0.0
 cd my-mule-application
 mule-build doctor --operation test
 mule-build test
@@ -89,8 +89,8 @@ mule-build release --bump patch --dry-run
 For CI and agent configuration, pin the command so every machine runs the same release:
 
 ```bash
-npx -y @sfdxy/mule-build@2.3.0 doctor --operation build
-npx -y @sfdxy/mule-build@2.3.0 package
+npx -y @sfdxy/mule-build@3.0.0 doctor --operation build
+npx -y @sfdxy/mule-build@3.0.0 package
 ```
 
 ## MCP and JavaScript API
@@ -98,7 +98,7 @@ npx -y @sfdxy/mule-build@2.3.0 package
 The MCP server exposes ten stable tools and packaged guidance:
 
 ```bash
-npx -y @sfdxy/mule-build@2.3.0 mcp
+npx -y @sfdxy/mule-build@3.0.0 mcp
 ```
 
 MCP `release_version` and `strip_secure` are preview-first. They require an explicit agent-side

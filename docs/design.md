@@ -27,6 +27,8 @@ The adapters own presentation and confirmation policy. API functions own orchest
 - Configuration is schema-validated and rejects unknown keys.
 - POM reads and writes target direct `<project>` children, never parent or dependency versions.
 - Child processes use argument arrays with `shell: false`.
+- A version override updates only a staged POM; the JAR metadata must match the requested version.
+- Artifact coordinates come from embedded Maven metadata and SHA-256 covers the returned bytes.
 - A strip build happens in a temporary staged project; it does not rewrite the checkout.
 - Releases preview without mutation when `dryRun` is true. Pushes target the current branch and the newly-created tag only.
 - Runtime state comes from the Mule control command and optional port probes, not directory existence.

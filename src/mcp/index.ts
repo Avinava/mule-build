@@ -279,7 +279,7 @@ export class MuleBuildMcpServer {
           return failure(result.error?.message ?? 'Security scan failed', result.error);
         }
         const message = result.data.valid
-          ? `All sensitive properties are secured (${result.data.filesChecked.length} files checked)`
+          ? `No unsecured references matched the configured property-name patterns (${result.data.filesChecked.length} files checked); run lint for broader security analysis`
           : `Found ${result.data.violations.length} unsecured sensitive properties`;
         return success(message, result.data);
       }

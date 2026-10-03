@@ -112,6 +112,8 @@ export interface PackageOptions {
 export interface PackageResult {
   /** Path to the generated JAR file */
   jarPath: string;
+  /** Verified embedded Maven coordinates and SHA-256 of the returned JAR. */
+  artifact: { groupId: string; artifactId: string; version: string; sha256: string };
   /** Deployment information */
   deploymentInfo: DeploymentInfo;
   /** Build metrics (duration, tests, warnings) */

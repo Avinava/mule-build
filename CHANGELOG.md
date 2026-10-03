@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Refresh compatible dependency locks to resolve audited runtime and development-tool findings without major-version upgrades.
+
+- Version overrides update an isolated POM copy and verify the packaged Maven version, leaving the
+  source checkout unchanged. Staged builds reject symlinks that could escape the copy.
+- Package results and CLI summaries expose embedded Maven coordinates and an exact-byte SHA-256
+  for a reviewed publication handoff. Missing, ambiguous, invalid, or mismatched identity fails.
+- Secure-reference checks describe their configured pattern scope without implying a full security
+  assessment.
+
 ## 2.3.0 - 2026-08-26
 
 ### Added

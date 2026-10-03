@@ -2,14 +2,31 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runSystemChecks } from '../src/config/SystemChecker.js';
+import { isMavenInstalled } from '../src/engine/MavenBuilder.js';
+
+vi.mock('../src/engine/MavenBuilder.js', () => ({
+  isMavenInstalled: vi.fn(async () => true),
+}));
 
 describe('test readiness', () => {
   const projects: string[] = [];
 
   afterEach(() => {
+    vi.mocked(isMavenInstalled).mockResolvedValue(true);
     for (const project of projects.splice(0)) rmSync(project, { recursive: true, force: true });
+  });
+
+  it('reports an unavailable Maven executable as a required failure', async () => {
+    vi.mocked(isMavenInstalled).mockResolvedValue(false);
+    const root = projectWithPlugins(['mule-maven-plugin']);
+    const result = await runSystemChecks(root, 'build');
+    expect(result.data?.ready).toBe(false);
+    expect(result.data?.details.find((item) => item.component === 'maven')).toMatchObject({
+      required: true,
+      passed: false,
+    });
   });
 
   function projectWithPlugins(plugins: string[]): string {

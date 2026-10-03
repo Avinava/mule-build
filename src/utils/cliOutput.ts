@@ -1,11 +1,21 @@
-import type { BuildMetrics, ReleaseResult } from '../types/index.js';
+import type { BuildMetrics, PackageResult, ReleaseResult } from '../types/index.js';
 
 function formatDuration(durationMs: number): string {
   return durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`;
 }
 
-export function packageSummaryLines(jarPath: string, metrics?: BuildMetrics): string[] {
+export function packageSummaryLines(
+  jarPath: string,
+  metrics?: BuildMetrics,
+  artifact?: PackageResult['artifact']
+): string[] {
   const lines = ['Package built successfully', `  Artifact: ${jarPath}`];
+  if (artifact) {
+    lines.push(
+      `  Maven coordinates: ${artifact.groupId}:${artifact.artifactId}:${artifact.version}`
+    );
+    lines.push(`  SHA-256: ${artifact.sha256}`);
+  }
   if (metrics?.testsRun !== undefined) {
     lines.push(
       `  Tests: ${metrics.testsRun} run, ${metrics.testsFailed ?? 0} failed, ${metrics.testsSkipped ?? 0} skipped`

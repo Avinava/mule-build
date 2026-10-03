@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { packageSummaryLines, releaseSummaryLines } from '../src/utils/cliOutput.js';
 
 describe('CLI summaries', () => {
+  it('shows verified identity separately from the display filename', () => {
+    const sha256 = 'a'.repeat(64);
+    expect(
+      packageSummaryLines('target/display-label.jar', undefined, {
+        groupId: 'dev.sample',
+        artifactId: 'sample',
+        version: '2.4.1',
+        sha256,
+      })
+    ).toEqual([
+      'Package built successfully',
+      '  Artifact: target/display-label.jar',
+      '  Maven coordinates: dev.sample:sample:2.4.1',
+      `  SHA-256: ${sha256}`,
+    ]);
+  });
+
   it('shows package metrics when Maven reports them', () => {
     expect(
       packageSummaryLines('/workspace/target/orders-api.jar', {

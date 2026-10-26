@@ -31,8 +31,8 @@
   JAR are incompatible with the target. Set `compatibility: warn` or `off` to opt out.
 - The property holding the `secure-properties:config` decryption key is no longer reported as an
   unsecured reference.
-- The sample application pins Java 17, declares its target, and uses mule-maven-plugin 4.5.1 so its
-  `javaSpecificationVersions` is honored.
+- The sample application pins Java 17 and declares its deployment target.
+- Compatible dependency locks are refreshed to resolve newly published audit findings.
 
 ## 3.0.0 - 2026-10-03
 

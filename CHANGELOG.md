@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The `mule-build` bin path is normalized, so npm 11 publishes it instead of silently removing it.
+  `scripts/check-release.mjs` now rejects `./`-prefixed bin paths.
+
 ## 3.1.0 - 2026-10-26
 
 ### Added

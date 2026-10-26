@@ -17,6 +17,13 @@ assert.equal(
   pkg.version,
   'Lockfile root version must match package.json'
 );
+// npm 11 removes bin entries whose path is not already normalized (for example "./dist/x.js").
+for (const [name, path] of Object.entries(pkg.bin ?? {})) {
+  assert.ok(
+    !/^\.{1,2}\/|\\/.test(path),
+    `bin "${name}" must be a normalized relative path (got "${path}"); npm 11 drops it on publish`
+  );
+}
 const changelog = readFileSync('CHANGELOG.md', 'utf8');
 const latestVersion = changelog.match(
   /^## \[?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\]|\s|$)/m

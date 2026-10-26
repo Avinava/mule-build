@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "mule-build": "./dist/bin/mule-build.js"
+    "mule-build": "dist/bin/mule-build.js"
   },
   "exports": {
     ".": {
@@ -55,7 +55,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Avinava/mule-build"
+    "url": "git+https://github.com/Avinava/mule-build.git"
   },
   "bugs": {
     "url": "https://github.com/Avinava/mule-build/issues"

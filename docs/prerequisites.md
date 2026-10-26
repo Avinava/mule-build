@@ -9,13 +9,30 @@ is what a Mule build needs.
 | --- | --- | --- |
 | Node.js `>=20.19.0` | Running the CLI and MCP server at all | The package `engines` field; npm warns on an older runtime |
 | Maven on `PATH` | Every build, package, test, and release | `doctor` runs `mvn` and reports whether it resolved |
-| A JDK compatible with your Mule runtime | Maven and the Mule runtime itself | Not checked directly — Maven fails first if it is absent or wrong |
+| A JDK compatible with your Mule runtime | Maven and the Mule runtime itself | `doctor` and `compat` compare the JDK Maven runs on with `app.runtime`, MUnit, and the connectors |
 | A Mule runtime distribution | `run`, `status`, and `stop` only | Resolved by version match; see below |
 | Git | `release`, and profiles with `enforceGitClean` | `doctor --operation release` checks the repository and clean working tree |
 
-Java is deliberately not a separate check. Maven cannot start without a usable JDK, so a Java problem
-surfaces as a Maven failure with the real message rather than a second guess from this tool. Match the
-JDK to your Mule runtime version, not to the newest release available.
+MUnit runs the embedded runtime on the JDK Maven uses. A newer default JDK on the machine is
+therefore a common silent mismatch. `doctor --operation test` treats it as a failure (`MB-TC-001`,
+`MB-TC-005`) before Maven starts. Match the JDK to your Mule runtime line:
+
+| Mule runtime | Java |
+| --- | --- |
+| 4.5 | 8, 11 |
+| 4.6 to 4.8 | 8, 11, 17 |
+| 4.9 and later | 17 |
+
+Source: [MuleSoft Java support](https://docs.mulesoft.com/general/java-support). Java 17 also needs
+MUnit 3.1.0 or later and mule-maven-plugin 4.1.1 or later.
+
+Pin the JDK in the project so every machine and CI job tests on the same one. `doctor` reads
+`.java-version`, `.tool-versions`, `mise.toml`, and `.sdkmanrc`, and warns when Maven is not using
+the pinned JDK:
+
+```bash
+echo 17 > .java-version
+```
 
 ## In your project
 
@@ -69,8 +86,8 @@ Pin the version so the executed build is explicit, and run `doctor` first so a m
 fails with a readable message instead of a Maven stack trace:
 
 ```yaml
-- run: npx -y @sfdxy/mule-build@3.0.0 doctor --operation build
-- run: npx -y @sfdxy/mule-build@3.0.0 package --profile production
+- run: npx -y @sfdxy/mule-build@3.1.0 doctor --operation build
+- run: npx -y @sfdxy/mule-build@3.1.0 package --profile production
 ```
 
 CI agents rarely have a Mule runtime installed, and they do not need one to package an application.

@@ -9,6 +9,10 @@ import { isMavenInstalled } from '../src/engine/MavenBuilder.js';
 vi.mock('../src/engine/MavenBuilder.js', () => ({
   isMavenInstalled: vi.fn(async () => true),
 }));
+vi.mock('../src/engine/Toolchain.js', async (original) => ({
+  ...(await original<typeof import('../src/engine/Toolchain.js')>()),
+  detectMavenToolchain: vi.fn(async () => undefined),
+}));
 
 describe('test readiness', () => {
   const projects: string[] = [];

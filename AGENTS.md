@@ -31,6 +31,7 @@ Run `npm run verify` before handoff. When the sample changes, also validate it w
 ```bash
 node dist/bin/mule-build.js -C examples/sample-orders-system-api doctor --operation test
 node dist/bin/mule-build.js -C examples/sample-orders-system-api enforce
+node dist/bin/mule-build.js -C examples/sample-orders-system-api compat
 node dist/bin/mule-build.js -C examples/sample-orders-system-api test
 node dist/bin/mule-build.js -C examples/sample-orders-system-api package
 ```

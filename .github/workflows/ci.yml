@@ -78,6 +78,13 @@ jobs:
           # Run enforce - should fail (exit 1) because password is not secured
           ! node dist/bin/mule-build.js enforce -d test-project2/src/main/mule
 
+          # A literal credential must fail without echoing the value
+          mkdir -p test-project3/src/main/mule
+          echo '<mule><sample:connection password="sample-literal-value" /></mule>' > test-project3/src/main/mule/global.xml
+          ! node dist/bin/mule-build.js enforce -d test-project3/src/main/mule > enforce-literal.txt 2>&1
+          grep -q 'MB-SEC-002' enforce-literal.txt
+          ! grep -q 'sample-literal-value' enforce-literal.txt
+
   sample-project:
     runs-on: ubuntu-latest
 
@@ -98,6 +105,15 @@ jobs:
           java-version: '17'
           cache: maven
 
+      # Pin Maven: the runner image's newer Maven breaks the Mule Maven plugin's resolver API.
+      - name: Setup Maven 3.9.9
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.9/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain
+        run: mvn -v
+
       - name: Build mule-build
         run: |
           npm ci
@@ -111,9 +127,12 @@ jobs:
           node dist/bin/mule-build.js -C "$SAMPLE" enforce
           node dist/bin/mule-build.js -C "$SAMPLE" test | tee sample-test-output.txt
           grep -E 'Tests passed: 1 run, 0 failures, 0 errors, 0 skipped' sample-test-output.txt
+          node dist/bin/mule-build.js -C "$SAMPLE" compat
           node dist/bin/mule-build.js -C "$SAMPLE" package | tee sample-package-output.txt
           grep -E 'Package built successfully' sample-package-output.txt
           test "$(find "$SAMPLE/target" -maxdepth 1 -name 'sample-orders-system-api-*.jar' | wc -l | tr -d ' ')" -ge 1
+          JAR="$(find "$PWD/$SAMPLE/target" -maxdepth 1 -name 'sample-orders-system-api-1.0.0-*.jar' | head -1)"
+          node dist/bin/mule-build.js -C "$SAMPLE" compat --artifact "$JAR" --no-toolchain
 
   docs:
     runs-on: ubuntu-latest

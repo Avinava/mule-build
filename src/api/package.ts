@@ -12,21 +12,20 @@ import { basename, isAbsolute, join, relative } from 'node:path';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import {
   DeploymentInfo,
+  Finding,
   PackageOptions,
   PackageResult,
   ProcessMode,
+  ProfileConfig,
   Result,
   err,
   ok,
 } from '../types/index.js';
 import { getProfileConfig, loadConfig } from '../config/ConfigLoader.js';
 import { canBuild } from '../config/SystemChecker.js';
-import {
-  enforceSecure,
-  getXmlFiles,
-  removeSecurePropertiesConfig,
-  stripSecure,
-} from '../engine/XmlProcessor.js';
+import { formatFinding, scanSecurity } from './enforce.js';
+import { evaluateProjectCompatibility } from './compat.js';
+import { getXmlFiles, removeSecurePropertiesConfig, stripSecure } from '../engine/XmlProcessor.js';
 import { findBuiltJar, mavenBuild } from '../engine/MavenBuilder.js';
 import { getPomInfo, getProjectName, setVersion } from '../engine/PomParser.js';
 import { inspectArtifact } from '../engine/ArtifactIdentity.js';
@@ -39,6 +38,16 @@ function safeName(value: string): string {
       .trim()
       .replace(/[^A-Za-z0-9._-]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'mule-app'
+  );
+}
+
+function gateError(gate: string, findings: Finding[]): Error {
+  const errors = findings.filter((finding) => finding.severity === 'error');
+  return new Error(
+    [
+      `${gate} failed with ${errors.length} error(s):`,
+      ...errors.map((finding) => `  ${formatFinding(finding)}`),
+    ].join('\n')
   );
 }
 
@@ -69,6 +78,7 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
   const cwd = options.cwd ?? process.cwd();
   const profileName = options.profile ?? options.environment;
   const configChanges: string[] = [];
+  const findings: Finding[] = [];
   let stage: string | undefined;
 
   const buildCheck = await canBuild(cwd);
@@ -81,7 +91,7 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
 
   const profileResult = profileName
     ? getProfileConfig(configResult.data, profileName)
-    : ok({
+    : ok<ProfileConfig>({
         mavenProfile: undefined,
         includeSource: false,
         secureProperties: 'unchanged' as ProcessMode,
@@ -113,22 +123,19 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     );
   }
   const projectName = safeName(nameResult.data ?? pom.data.artifactId);
-  const sourceMuleDir = join(cwd, 'src', 'main', 'mule');
 
   try {
     if (processMode === 'enforce') {
-      const enforcement = await enforceSecure(sourceMuleDir, { cwd });
+      const enforcement = await scanSecurity({ cwd });
       if (!enforcement.success || !enforcement.data) {
         return err(enforcement.error ?? new Error('Security enforcement failed'));
       }
+      const securityFindings = enforcement.data.findings ?? [];
       if (!enforcement.data.valid) {
-        return err(
-          new Error(
-            `Security validation failed with ${enforcement.data.violations.length} unsecured properties`
-          )
-        );
+        return err(gateError('Security validation', securityFindings));
       }
-      configChanges.push('Validated secure property references');
+      findings.push(...securityFindings.filter((finding) => finding.severity !== 'info'));
+      configChanges.push('Validated secrets and secure property references');
     }
 
     let buildCwd = cwd;
@@ -195,6 +202,25 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
       return err(new Error('Built JAR version does not match the requested project version'));
     }
     const artifact = { ...identity.coordinates, sha256: identity.sha256 };
+
+    const compatibilityMode = profile.compatibility ?? 'warn';
+    if (compatibilityMode !== 'off') {
+      const compatibility = await evaluateProjectCompatibility(cwd, {
+        artifactBytes: bytes,
+        toolchain: false,
+      });
+      if (!compatibility.success || !compatibility.data) {
+        return err(compatibility.error ?? new Error('Compatibility check failed'));
+      }
+      const compatibilityFindings = compatibility.data.findings;
+      if (compatibilityMode === 'enforce' && !compatibility.data.valid) {
+        return err(gateError('Compatibility validation', compatibilityFindings));
+      }
+      findings.push(...compatibilityFindings.filter((finding) => finding.severity !== 'info'));
+      configChanges.push(
+        `Checked packaged connectors against Mule ${compatibility.data.target.muleVersion ?? 'unknown'} / Java ${compatibility.data.target.javaVersion ?? 'unknown'}`
+      );
+    }
     const version = artifact.version;
 
     const suffix = profileName
@@ -233,10 +259,17 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
         `Machine: ${deploymentInfo.machine}`,
         ...configChanges.map((change) => `- ${change}`),
         `Original JAR: ${basename(jar.data)}`,
+        ...findings.map((finding) => `Finding: ${formatFinding(finding)}`),
       ].join('\n')
     );
 
-    return ok({ jarPath: finalPath, artifact, deploymentInfo, metrics: build.data?.metrics });
+    return ok({
+      jarPath: finalPath,
+      artifact,
+      deploymentInfo,
+      metrics: build.data?.metrics,
+      findings,
+    });
   } catch (error) {
     return err(error instanceof Error ? error : new Error(String(error)));
   } finally {

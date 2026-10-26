@@ -113,6 +113,95 @@ export function getPomInfo(cwd: string = process.cwd()): Result<PomInfo> {
   return ok(info);
 }
 
+/** A direct project dependency with `${...}` references resolved where possible. */
+export interface PomDependency {
+  groupId?: string;
+  artifactId?: string;
+  version?: string;
+  classifier?: string;
+  scope?: string;
+}
+
+function stripXmlComments(content: string): string {
+  return content.replace(/<!--[\s\S]*?-->/g, '');
+}
+
+function childText(block: string, name: string): string | undefined {
+  return new RegExp(`<${name}>\\s*([^<]*?)\\s*</${name}>`).exec(block)?.[1];
+}
+
+function blocks(content: string, name: string): string[] {
+  return [...content.matchAll(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'g'))].map(
+    (match) => match[1]
+  );
+}
+
+/** Resolve `${name}` against project properties; unresolvable references are kept. */
+export function interpolate(value: string, properties: Record<string, string>): string {
+  let result = value;
+  for (let depth = 0; depth < 5 && result.includes('${'); depth++) {
+    result = result.replace(/\$\{([^}]+)\}/g, (match, name: string) => properties[name] ?? match);
+  }
+  return result;
+}
+
+/** Project `<properties>` plus the built-in project.* coordinates. */
+export function getPomProperties(content: string): Record<string, string> {
+  const source = stripXmlComments(content);
+  const properties: Record<string, string> = {};
+  const range = findDirectProjectChild(source, 'properties');
+  if (range) {
+    const body = source.slice(range.contentStart, range.contentEnd);
+    for (const match of body.matchAll(/<([A-Za-z_][\w.-]*)>\s*([^<]*?)\s*<\/\1>/g)) {
+      properties[match[1]] = match[2];
+    }
+  }
+  for (const name of ['groupId', 'artifactId', 'version']) {
+    const value = getDirectProjectValue(source, name);
+    if (value) properties[`project.${name}`] = value;
+  }
+  return properties;
+}
+
+/** Direct `<dependencies>` of the project (not dependencyManagement or plugin dependencies). */
+export function getDependencies(content: string): PomDependency[] {
+  const source = stripXmlComments(content);
+  const range = findDirectProjectChild(source, 'dependencies');
+  if (!range) return [];
+  const properties = getPomProperties(source);
+  return blocks(source.slice(range.contentStart, range.contentEnd), 'dependency').map((block) => {
+    const own = block.replace(/<exclusions>[\s\S]*?<\/exclusions>/g, '');
+    const read = (name: string) => {
+      const value = childText(own, name);
+      return value === undefined ? undefined : interpolate(value, properties);
+    };
+    return {
+      groupId: read('groupId'),
+      artifactId: read('artifactId'),
+      version: read('version'),
+      classifier: read('classifier'),
+      scope: read('scope'),
+    };
+  });
+}
+
+/** Version of a build plugin declared under the project `<build><plugins>`. */
+export function getPluginVersion(content: string, artifactId: string): string | undefined {
+  const source = stripXmlComments(content);
+  const range = findDirectProjectChild(source, 'build');
+  if (!range) return undefined;
+  const plugin = blocks(source.slice(range.contentStart, range.contentEnd), 'plugin')
+    .map((block) => block.replace(/<(dependencies|configuration)>[\s\S]*?<\/\1>/g, ''))
+    .find((block) => childText(block, 'artifactId') === artifactId);
+  const version = plugin && childText(plugin, 'version');
+  return version === undefined ? undefined : interpolate(version, getPomProperties(source));
+}
+
+/** Whether the POM inherits from a parent, whose properties are not read statically. */
+export function hasParent(content: string): boolean {
+  return findDirectProjectChild(stripXmlComments(content), 'parent') !== undefined;
+}
+
 /**
  * Get project name (prefers <name>, falls back to <artifactId>)
  */

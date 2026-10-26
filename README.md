@@ -18,7 +18,7 @@ that starts the command; you do not need to write JavaScript or understand a Nod
 You need Node.js 20.19 or newer, Maven, and a JDK supported by your Mule runtime.
 
 ```bash
-npm install --global @sfdxy/mule-build@3.0.0
+npm install --global @sfdxy/mule-build@3.1.0
 cd my-mule-application
 mule-build doctor --operation test
 mule-build test
@@ -55,14 +55,15 @@ The JAR stays in `target/`. `mule-build` does not publish to Exchange or deploy 
 | `doctor` | Check Maven, POM, Mule/MUnit plugins, source layout, runtime, or Git readiness |
 | `test` | Run all MUnit tests or select a suite, test, or tags |
 | `package` | Run the Mule Maven package lifecycle and copy the final JAR to `target/` |
-| `enforce` | Find sensitive properties that do not use `secure::` |
+| `enforce` | Find secrets that would ship in the JAR: unsecured references, literal credentials, plaintext config values |
+| `compat` | Check connectors, `mule-artifact.json`, Maven JDK, and MUnit against the target Mule runtime and Java |
 | `run` | Build and deploy to a compatible Mule runtime on your machine |
 | `status`, `stop` | Inspect or stop that resolved local runtime |
 | `release` | Change the POM version, build, commit, tag, and optionally push |
 | `strip` | Directly remove `secure::` prefixes from source XML |
 | `mcp` | Let an MCP-capable coding agent call the same operations |
 
-`doctor`, `enforce`, `status`, and release `--dry-run` are read-only. Direct `strip` and direct
+`doctor`, `enforce`, `compat`, `status`, and release `--dry-run` are read-only. Direct `strip` and direct
 `release` mutate by default; preview them with `--dry-run`. `package --strip-secure` is different: it
 uses an isolated temporary copy and does not edit your source.
 
@@ -81,24 +82,45 @@ mule-build package
 # Production policy from mule-build.yaml
 mule-build package --profile production
 
+# Secrets that would ship in the JAR, and connector/runtime/JDK compatibility
+mule-build enforce
+mule-build compat
+
 # Release preview: no POM, commit, tag, or remote changes
 mule-build doctor --operation release
 mule-build release --bump patch --dry-run
 ```
 
+## Security and compatibility gates
+
+- `enforce` fails when a secret would ship in the artifact: a sensitive reference without
+  `secure::`, a literal credential in a connector configuration, or a plaintext value in a shipped
+  YAML or `.properties` file. It accepts both secret models: encrypted Secure Configuration Properties
+  (`${secure::key}`) and platform secure properties (`${key}` listed in `mule-artifact.json`
+  `secureProperties`). See [Secret models](docs/design.md#secret-models).
+- `compat` checks each connector's `minMuleVersion` and Java support, read from the connector JARs,
+  against `mule-artifact.json`, `app.runtime`, and the declared `target`. It also checks the JDK
+  Maven and MUnit run on.
+- The `production` profile runs both gates around the build. Other builds report warnings.
+
+Every result is a finding with a stable code (`MB-SEC-*`, `MB-CMP-*`, `MB-TC-*`) and a fix. Findings
+never contain secret values. Codes are listed under [`enforce`](docs/cli.md#enforce) and
+[`compat`](docs/cli.md#compat).
+
 For CI and agent configuration, pin the command so every machine runs the same release:
 
 ```bash
-npx -y @sfdxy/mule-build@3.0.0 doctor --operation build
-npx -y @sfdxy/mule-build@3.0.0 package
+npx -y @sfdxy/mule-build@3.1.0 doctor --operation build
+npx -y @sfdxy/mule-build@3.1.0 package
 ```
 
 ## MCP and JavaScript API
 
-The MCP server exposes ten stable tools and packaged guidance:
+The MCP server exposes eleven stable tools, including the read-only `check_compatibility`, and
+packaged guidance:
 
 ```bash
-npx -y @sfdxy/mule-build@3.0.0 mcp
+npx -y @sfdxy/mule-build@3.1.0 mcp
 ```
 
 MCP `release_version` and `strip_secure` are preview-first. They require an explicit agent-side

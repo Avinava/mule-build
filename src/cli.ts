@@ -11,9 +11,10 @@ import { testProject } from './api/test.js';
 import { runLocal } from './api/run.js';
 import { releaseVersion } from './api/release.js';
 import { stripSecure } from './api/strip.js';
-import { enforceSecure } from './api/enforce.js';
+import { SECURITY_RULES, enforceSecure, formatFinding } from './api/enforce.js';
+import { checkCompatibility } from './api/compat.js';
 import { setLogLevel } from './utils/logger.js';
-import { BumpType } from './types/index.js';
+import { BumpType, Finding, SecurityRule } from './types/index.js';
 import { BuildError } from './engine/MavenBuilder.js';
 import { runSystemChecks } from './config/SystemChecker.js';
 import { getRuntimeStatus, stopMuleRuntime } from './engine/LocalRuntime.js';
@@ -22,6 +23,20 @@ import { packageSummaryLines, releaseSummaryLines } from './utils/cliOutput.js';
 
 // Package info
 const NAME = 'mule-build';
+
+function printFindings(findings: Finding[]): void {
+  for (const finding of findings) {
+    const marker = finding.severity === 'error' ? '✗' : finding.severity === 'warning' ? '!' : '○';
+    const color =
+      finding.severity === 'error'
+        ? chalk.red
+        : finding.severity === 'warning'
+          ? chalk.yellow
+          : chalk.dim;
+    console.log(color(`${marker} ${formatFinding(finding)}`));
+    if (finding.remediation) console.log(chalk.dim(`  → ${finding.remediation}`));
+  }
+}
 
 /**
  * Create and configure the CLI program
@@ -96,6 +111,9 @@ export function createProgram(): Command {
       );
       console.log(chalk.green(`\n✓ ${headline}`));
       for (const detail of details) console.log(chalk.dim(detail));
+      for (const finding of result.data?.findings ?? []) {
+        console.log(chalk.yellow(`! ${formatFinding(finding)}`));
+      }
     });
 
   // Run command
@@ -245,11 +263,26 @@ export function createProgram(): Command {
     .command('enforce')
     .description('Check for unsecured sensitive properties')
     .option('-f, --file <path>', 'Check single file')
-    .option('-d, --dir <path>', 'Check all XML files in directory (default: src/main/mule)')
+    .option(
+      '-d, --dir <path>',
+      'Check XML and configuration files in directory (default: src/main/mule and src/main/resources)'
+    )
+    .option('--rules <rules>', `Comma-separated rule groups: ${SECURITY_RULES.join(', ')}`)
     .action(async (options) => {
+      const rules = options.rules
+        ? String(options.rules)
+            .split(',')
+            .map((rule) => rule.trim())
+        : undefined;
+      const unknown = rules?.filter((rule) => !SECURITY_RULES.includes(rule as SecurityRule));
+      if (unknown?.length) {
+        console.error(chalk.red(`Unknown rule group: ${unknown.join(', ')}`));
+        process.exit(1);
+      }
       const result = await enforceSecure({
         file: options.file,
         directory: options.dir,
+        rules: rules as SecurityRule[] | undefined,
         cwd: program.opts().cwd,
       });
 
@@ -258,15 +291,64 @@ export function createProgram(): Command {
         process.exit(1);
       }
 
+      const errors = (result.data?.findings ?? []).filter((f) => f.severity === 'error');
       if (result.data?.valid) {
         console.log(
           chalk.green(
-            '\n✓ No unsecured references matched the configured property-name patterns; this is not a complete security assessment'
+            '\n✓ No secrets or unsecured references matched the mule-build security rules; this is not a complete security assessment'
           )
         );
       } else {
-        console.log(chalk.red(`\n✗ Found ${result.data?.violations.length} unsecured properties`));
+        console.log(chalk.red(`\n✗ Found ${errors.length} security error(s)`));
         process.exit(1);
+      }
+    });
+
+  program
+    .command('compat')
+    .description(
+      'Check connectors, mule-artifact.json, and toolchain against the target runtime and Java'
+    )
+    .option(
+      '-a, --artifact <jar>',
+      'Inspect a packaged application JAR instead of the Maven repository'
+    )
+    .option('--no-toolchain', 'Skip Maven JDK, MUnit, and JDK pin checks')
+    .action(async (options) => {
+      const result = await checkCompatibility({
+        cwd: program.opts().cwd,
+        artifact: options.artifact,
+        toolchain: options.toolchain,
+      });
+      if (!result.success || !result.data) {
+        console.error(chalk.red(`Compatibility check failed: ${result.error?.message}`));
+        process.exit(1);
+      }
+      const report = result.data;
+      const { muleVersion, muleVersionSource, javaVersion, javaVersionSource } = report.target;
+      console.log(
+        `Target: Mule ${muleVersion ?? 'unknown'}${muleVersionSource ? ` (${muleVersionSource})` : ''}, Java ${javaVersion ?? 'unknown'}${javaVersionSource ? ` (${javaVersionSource})` : ''}`
+      );
+      if (report.toolchain?.maven?.javaVersion) {
+        console.log(
+          `Maven JDK: ${report.toolchain.maven.javaVersion} ${report.toolchain.maven.javaVendor ?? ''}`.trimEnd()
+        );
+      }
+      for (const connector of report.connectors) {
+        const facts = connector.minMuleVersion
+          ? `Mule >= ${connector.minMuleVersion}, Java ${connector.javaVersions?.join('/')}${connector.javaVersionsDeclared ? '' : ' (default)'}`
+          : connector.problem;
+        console.log(
+          chalk.dim(
+            `  ${connector.groupId}:${connector.artifactId}:${connector.version ?? '?'}  ${facts}`
+          )
+        );
+      }
+      printFindings(report.findings);
+      if (report.valid) {
+        console.log(chalk.green('\n✓ No compatibility errors'));
+      } else {
+        process.exitCode = 1;
       }
     });
 
@@ -285,9 +367,16 @@ export function createProgram(): Command {
         process.exit(1);
       }
       for (const detail of result.data.details) {
-        const marker = detail.passed ? '✓' : detail.required ? '✗' : '○';
+        const marker = detail.passed
+          ? '✓'
+          : detail.required
+            ? '✗'
+            : detail.severity === 'error' || detail.severity === 'warning'
+              ? '!'
+              : '○';
         const optional = !detail.required && !detail.passed ? ' (optional)' : '';
-        console.log(`${marker} ${detail.message}${optional}`);
+        const code = detail.code ? `${detail.code} ` : '';
+        console.log(`${marker} ${code}${detail.message}${optional}`);
         if (!detail.passed && detail.remediation) {
           console.log(chalk.dim(`  → ${detail.remediation}`));
         }

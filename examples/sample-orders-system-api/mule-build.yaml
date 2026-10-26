@@ -1,0 +1,3 @@
+target:
+  muleVersion: 4.6.0
+  javaVersion: "17"

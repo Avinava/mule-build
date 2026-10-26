@@ -24,6 +24,7 @@ describe('Mule Build MCP protocol', () => {
     const response = await client.listTools();
     expect(response.tools.map((tool) => tool.name).sort()).toEqual(
       [
+        'check_compatibility',
         'check_runtime_status',
         'enforce_security',
         'get_project_config',

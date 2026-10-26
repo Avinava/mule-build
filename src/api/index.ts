@@ -11,6 +11,8 @@ export { runLocal } from './run.js';
 export { releaseVersion } from './release.js';
 export { stripSecure } from './strip.js';
 export { enforceSecure } from './enforce.js';
+export { checkCompatibility } from './compat.js';
+export type { CompatibilityOptions, CompatibilityReport, ConnectorReport } from './compat.js';
 export { systemCheck, getRuntimeStatus, stopRuntime } from './system.js';
 export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from './system.js';
 
@@ -29,6 +31,13 @@ export type {
   StripResult,
   EnforceOptions,
   EnforceResult,
+  Finding,
+  FindingSeverity,
+  FindingCategory,
+  SecurityRule,
+  TargetConfig,
+  SecurityConfig,
+  GateMode,
   DeploymentInfo,
   BuildProfile,
   BuildEnvironment,

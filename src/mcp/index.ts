@@ -8,7 +8,8 @@ import { packageProject } from '../api/package.js';
 import { testProject } from '../api/test.js';
 import { releaseVersion } from '../api/release.js';
 import { runLocal } from '../api/run.js';
-import { enforceSecure } from '../api/enforce.js';
+import { enforceSecure, formatFinding } from '../api/enforce.js';
+import { checkCompatibility } from '../api/compat.js';
 import { stripSecure } from '../api/strip.js';
 import { loadConfig } from '../config/ConfigLoader.js';
 import { runSystemChecks } from '../config/SystemChecker.js';
@@ -264,11 +265,17 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'enforce_security',
       {
-        description: 'Scan Mule XML for sensitive property references missing secure::.',
+        description:
+          'Scan a Mule project for secrets that would ship in the artifact: sensitive references missing secure::, hardcoded credentials in XML, plaintext secrets in YAML/.properties, and mismatched secret models. Findings never include secret values.',
         inputSchema: {
           cwd: z.string().optional(),
           directory: z.string().optional(),
+          file: z.string().optional(),
           sensitivePatterns: z.array(z.string()).optional(),
+          rules: z
+            .array(z.enum(['references', 'literals', 'config']))
+            .optional()
+            .describe('Rule groups to run; defaults to all'),
         },
         outputSchema: OutputSchema,
         annotations: readonlyAnnotations,
@@ -278,9 +285,49 @@ export class MuleBuildMcpServer {
         if (!result.success || !result.data) {
           return failure(result.error?.message ?? 'Security scan failed', result.error);
         }
+        const errors = (result.data.findings ?? []).filter((f) => f.severity === 'error');
         const message = result.data.valid
-          ? `No unsecured references matched the configured property-name patterns (${result.data.filesChecked.length} files checked); run lint for broader security analysis`
-          : `Found ${result.data.violations.length} unsecured sensitive properties`;
+          ? `No secrets or unsecured references matched the mule-build security rules (${result.data.filesChecked.length} files checked); run lint for broader security analysis`
+          : `Found ${errors.length} security errors: ${errors
+              .slice(0, 5)
+              .map((finding) => formatFinding(finding))
+              .join('; ')}`;
+        return success(message, result.data);
+      }
+    );
+
+    this.server.registerTool(
+      'check_compatibility',
+      {
+        description:
+          'Check that connectors, mule-artifact.json (minMuleVersion, javaSpecificationVersions), the Maven JDK, and MUnit agree with the target Mule runtime and Java. Read-only; never downloads.',
+        inputSchema: {
+          cwd: z.string().optional(),
+          artifact: z
+            .string()
+            .optional()
+            .describe('Packaged application JAR to inspect instead of the local Maven repository'),
+          toolchain: z
+            .boolean()
+            .optional()
+            .describe('Check Maven JDK, MUnit, and JDK pins (default true)'),
+        },
+        outputSchema: OutputSchema,
+        annotations: readonlyAnnotations,
+      },
+      async (args) => {
+        const result = await checkCompatibility(args);
+        if (!result.success || !result.data) {
+          return failure(result.error?.message ?? 'Compatibility check failed', result.error);
+        }
+        const errors = result.data.findings.filter((f) => f.severity === 'error');
+        const { muleVersion, javaVersion } = result.data.target;
+        const message = result.data.valid
+          ? `No compatibility errors for Mule ${muleVersion ?? 'unknown'} / Java ${javaVersion ?? 'unknown'} (${result.data.connectors.length} connectors)`
+          : `Found ${errors.length} compatibility errors: ${errors
+              .slice(0, 5)
+              .map((finding) => formatFinding(finding))
+              .join('; ')}`;
         return success(message, result.data);
       }
     );
@@ -430,7 +477,7 @@ export class MuleBuildMcpServer {
             role: 'user',
             content: {
               type: 'text',
-              text: `For ${projectPath ?? 'the current Mule project'}, run system_check operation="release" and enforce_security. Then call release_version with bump="${bump}" and confirm=false. Show the preview and ask me before calling it with confirm=true.`,
+              text: `For ${projectPath ?? 'the current Mule project'}, run system_check operation="release", enforce_security, and check_compatibility. Then call release_version with bump="${bump}" and confirm=false. Show the preview and ask me before calling it with confirm=true.`,
             },
           },
         ],

@@ -11,7 +11,8 @@ a remediation line, which resolves most of what follows without reading further.
 | `pom.xml not found` | You are not in the project root. Pass `-C /path/to/project` |
 | `mule-maven-plugin not found in pom.xml` | The POM is not a Mule application POM. This check is what separates a Mule project from any other Maven project, and building without it would fail later with a worse message |
 | `src/main/mule not found` | Non-standard layout. Restore the standard directory rather than pointing the tool elsewhere |
-| A Java error from Maven | Java is not verified separately, because Maven fails first with the real cause. Match the JDK to your Mule runtime version |
+| A Java error from Maven | Run `mule-build compat`. It reports the JDK Maven actually uses (`mvn -v`) against `app.runtime`, MUnit, and the connectors (`MB-TC-001`, `MB-TC-002`, `MB-TC-005`) |
+| `MB-TC-003` pin disagrees with Maven | The shell or CI step is not using the pinned JDK. Activate the version manager there, or set `JAVA_HOME` to the pinned JDK |
 
 ## Runtime
 
@@ -28,7 +29,15 @@ a remediation line, which resolves most of what follows without reading further.
 | Symptom | Cause and fix |
 | --- | --- |
 | `--strip-secure` refused | The selected profile sets `secureProperties: enforce`. The two intentions conflict; pick one |
-| `enforce` exits non-zero | That is the gate working: a sensitive property reference is missing `secure::`. The output names the file |
+| `enforce` exits non-zero | That is the gate working. Each finding names the code, file, and line; the codes are in the [CLI reference](cli.md#enforce) |
+| `MB-SEC-002` on a connector config | A credential is written as a literal. Use `${secure::key}` with an encrypted file, or a platform secure property (`${key}` listed in `mule-artifact.json` `secureProperties`) |
+| `MB-SEC-003` in `src/main/resources` | A plaintext secret would be packaged into the JAR. Encrypt it as `![...]`, or supply it at deployment |
+| `MB-SEC-004` unused sensitive key | A connector usually uses a literal or a differently named key. Wire it up, or delete the key |
+| `MB-SEC-006` platform key with `secure::` | `secure::` only resolves from a secure properties file. Reference the platform-supplied key as `${key}` |
+| A deliberate test value is flagged | Add a `security.allow` entry with the file, key, and reason |
+| `package` fails with `Compatibility validation failed` | The profile sets `compatibility: enforce` and a bundled connector disagrees with the target. Fix what the finding names: usually `minMuleVersion`, `app.runtime`, or `javaSpecificationVersions` after a connector upgrade |
+| `MB-CMP-006` connector not checked | Its version comes from a parent or BOM, or it is not in the local Maven repository yet. Build once, or run `compat --artifact <jar>` on the packaged JAR |
+| `MB-CMP-008` target unknown | Set `target.muleVersion` and `target.javaVersion` in `mule-build.yaml` to the runtime and JVM you deploy to |
 | Source XML changed unexpectedly | Only `strip` edits source, and only without `--dry-run`. Builds stage an isolated copy, so `package --strip-secure` cannot alter your checkout |
 | Tests did not run | `-S, --skip-tests` was passed, or the profile skips them. State the verification gap wherever you report the build |
 | Unknown configuration key | Validation is strict by design. A typo in `mule-build.yaml` fails immediately rather than being silently ignored |

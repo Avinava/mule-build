@@ -57,6 +57,56 @@ export interface StopRuntimeOptions {
   timeoutMs?: number;
 }
 
+export type FindingSeverity = 'error' | 'warning' | 'info';
+export type FindingCategory = 'security' | 'compatibility' | 'toolchain';
+
+/**
+ * A diagnostic with a stable code. Findings never carry secret values: literals
+ * are described by length only, so results are safe to log, print, or return over MCP.
+ */
+export interface Finding {
+  /** Stable identifier, e.g. MB-SEC-002 or MB-CMP-003. */
+  code: string;
+  severity: FindingSeverity;
+  category: FindingCategory;
+  message: string;
+  file?: string;
+  line?: number;
+  remediation?: string;
+  /** Supporting facts such as versions and their sources. */
+  evidence?: Record<string, string>;
+}
+
+/** Deployment target used for compatibility checks. */
+export interface TargetConfig {
+  /** Mule runtime version the artifact must start on, e.g. 4.6.6. */
+  muleVersion?: string;
+  /** Java feature version of the target JVM, e.g. 17. */
+  javaVersion?: string;
+}
+
+/** A reviewed exception for a security finding. */
+export interface SecurityAllowEntry {
+  /** Project-relative file path. */
+  file: string;
+  /** Property key (config files) or attribute name (XML). */
+  key: string;
+  /** Why the exception is safe. */
+  reason: string;
+}
+
+export interface SecurityConfig {
+  /** Additional case-insensitive key endings treated as secrets. */
+  sensitiveKeys?: string[];
+  allow?: SecurityAllowEntry[];
+}
+
+/** How a gate treats error findings. */
+export type GateMode = 'enforce' | 'warn' | 'off';
+
+/** Security rule groups run by enforce. */
+export type SecurityRule = 'references' | 'literals' | 'config';
+
 /**
  * Result type for operations that can fail
  */
@@ -118,6 +168,8 @@ export interface PackageResult {
   deploymentInfo: DeploymentInfo;
   /** Build metrics (duration, tests, warnings) */
   metrics?: BuildMetrics;
+  /** Security and compatibility findings that did not block the build. */
+  findings?: Finding[];
 }
 
 /** Options for running MUnit tests without packaging or releasing. */
@@ -262,12 +314,14 @@ export interface StripResult {
  * Enforce command options
  */
 export interface EnforceOptions {
-  /** Check a single file */
+  /** Check a single file (XML, YAML, or .properties) */
   file?: string;
   /** Check all XML files in directory */
   directory?: string;
-  /** Custom sensitive property patterns */
+  /** Custom sensitive property-name patterns for the references rule */
   sensitivePatterns?: string[];
+  /** Rule groups to run. Defaults to all: references, literals, and config. */
+  rules?: SecurityRule[];
   /** Working directory (defaults to cwd) */
   cwd?: string;
 }
@@ -276,12 +330,17 @@ export interface EnforceOptions {
  * Enforce command result
  */
 export interface EnforceResult {
-  /** Whether all sensitive properties are secured */
+  /** Whether no error findings were reported */
   valid: boolean;
   /** Files that were checked */
   filesChecked: string[];
-  /** Violations found */
+  /** Unsecured property references (the references rule, MB-SEC-001) */
   violations: SecurityViolation[];
+  /**
+   * Findings from every rule that ran, with secret values redacted. Always set by
+   * enforceSecure; optional only so 3.0 result literals remain valid.
+   */
+  findings?: Finding[];
 }
 
 /**
@@ -319,6 +378,8 @@ export interface MuleBuildConfig {
     [key: string]: ProfileConfig;
   };
   runtime?: RuntimeConfig;
+  target?: TargetConfig;
+  security?: SecurityConfig;
 }
 
 /**
@@ -330,6 +391,8 @@ export interface ProfileConfig {
   secureProperties?: ProcessMode;
   includeSource?: boolean;
   enforceGitClean?: boolean;
+  /** Whether compatibility errors in the packaged JAR fail the build. */
+  compatibility?: GateMode;
 }
 
 /**

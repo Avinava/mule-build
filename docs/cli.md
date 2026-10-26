@@ -20,7 +20,9 @@ Diagnose whether the project and machine can perform an operation. Read-only.
 | `--operation <operation>` | `build`, `test`, `run`, or `release`. Defaults to `build` |
 
 The operation matters: a compatible Mule runtime is required for `run` and informational for `build`.
-See [Prerequisites](prerequisites.md).
+`doctor` also prints the [compatibility and toolchain findings](#compat) with their codes. Toolchain
+errors (`MB-TC-*`) block `test` and `run`, because Maven or MUnit would fail. Compatibility errors
+(`MB-CMP-*`) block `release`. Both are listed for every operation. See [Prerequisites](prerequisites.md).
 
 ```bash
 mule-build doctor --operation build
@@ -67,6 +69,13 @@ mule-build package --strip-secure
 `--strip-secure` conflicts with a profile whose `secureProperties` is `enforce`; the conflict is
 reported rather than silently resolved.
 
+A profile with `secureProperties: enforce` runs every [`enforce`](#enforce) rule before Maven starts and
+fails on any error. After the build, `package` checks the connectors bundled in the packaged JAR against
+the target runtime and Java (see [`compat`](#compat)). The profile's `compatibility` setting decides what
+an error does: `enforce` fails the build (the built-in `production` default), `warn` reports it (the
+default for other builds), and `off` skips the check. Warnings appear in the build summary and in
+`deployment-info.txt`.
+
 ## `run`
 
 Build, start a project-compatible runtime if one is not already running, and deploy.
@@ -102,16 +111,96 @@ mule-build stop --runtime-home /opt/mule-4.10.2
 
 ## `enforce`
 
-Scan Mule XML for sensitive property references that omit `secure::`. Read-only, and exits non-zero
-when it finds one, which makes it usable as a CI gate.
+Check what would ship inside the artifact for secrets. Read-only, and exits non-zero on any error
+finding, which makes it usable as a CI gate. Findings never print a secret value; a literal appears
+only as `<redacted, N chars>`.
 
 | Option | Effect |
 | --- | --- |
-| `-f, --file <path>` | Check a single file |
-| `-d, --dir <path>` | Check a directory. Defaults to `src/main/mule` |
+| `-f, --file <path>` | Check a single XML, YAML, or `.properties` file |
+| `-d, --dir <path>` | Check a directory. Defaults to `src/main/mule` plus `src/main/resources` |
+| `--rules <rules>` | Comma-separated rule groups: `references`, `literals`, `config`. Defaults to all |
+
+| Code | Group | Severity | Finds |
+| --- | --- | --- | --- |
+| `MB-SEC-001` | references | error | A sensitive `${prop}` / `p('prop')` reference without `secure::` |
+| `MB-SEC-002` | literals | error | A literal value in a sensitive XML attribute, such as `password="..."`, or a literal `secure-properties:config` key |
+| `MB-SEC-003` | config | error | A plaintext value under a sensitive key in a shipped YAML or `.properties` file |
+| `MB-SEC-004` | config | warning | A sensitive key that nothing references, often the sign of a literal used instead |
+| `MB-SEC-005` | config | warning | A configuration file that could not be parsed, so it was not checked |
+| `MB-SEC-006` | references | error | A platform secure property (listed in `mule-artifact.json` `secureProperties`) referenced with `secure::` |
+| `MB-SEC-007` | references | warning | A `secure::` reference with no `secure-properties:config`, or one not defined in any scanned file |
+
+Two secret models are accepted, and remediation lines name both. With **Secure Configuration
+Properties**, values are encrypted as `![...]` in a file read by `secure-properties:config` and
+referenced as `${secure::key}`. With **platform secure properties**, values are supplied at deployment,
+referenced as plain `${key}`, and listed in `mule-artifact.json` `secureProperties`. A reference to a
+listed key without `secure::` is not an `MB-SEC-001` finding. Neither is the property that holds the
+`secure-properties:config` decryption key.
+
+The `api/` and `exchange_modules/` resource folders hold specifications and examples, so they are not
+scanned. Reviewed exceptions go in `mule-build.yaml`:
+
+```yaml
+security:
+  sensitiveKeys: [vendorPin]        # extra key endings to treat as secrets
+  allow:
+    - file: src/main/resources/sample.yaml
+      key: sample.demo.password
+      reason: public demo value
+```
 
 ```bash
 mule-build enforce
+mule-build enforce --rules references   # the 3.0 scope only
+```
+
+## `compat`
+
+Check that the connectors, `mule-artifact.json`, and the local toolchain agree with the deployment
+target. Read-only and offline: connector facts come from the packaged JAR (`--artifact`) or from the local
+Maven repository, and nothing is downloaded. It exits non-zero on any error finding.
+
+| Option | Effect |
+| --- | --- |
+| `-a, --artifact <jar>` | Inspect a packaged application JAR instead of the Maven repository |
+| `--no-toolchain` | Skip the Maven JDK, MUnit, and JDK pin checks |
+
+The target comes from `target` in `mule-build.yaml`. Without it, the Mule version falls back to
+`app.runtime` in `pom.xml` and then the `.classpath` runtime. The Java version falls back to a
+single `javaSpecificationVersions` entry, or to the only Java a runtime line supports.
+
+```yaml
+target:
+  muleVersion: 4.6.6
+  javaVersion: "17"
+```
+
+For each connector, `compat` reads `minMuleVersion` from the plugin's `mule-artifact.json`, the Java
+versions declared with `@JavaVersionSupport`, and the class-file version of the extension class. A
+connector without the annotation is assumed to support Java 8 and 11, as Mule assumes.
+
+| Code | Severity | Finds |
+| --- | --- | --- |
+| `MB-CMP-001` | error | `mule-artifact.json` `minMuleVersion` is lower than a connector requires |
+| `MB-CMP-002` | error | `target.muleVersion`, `app.runtime`, or the Studio runtime is lower than a connector requires |
+| `MB-CMP-003` | error | A connector does not support the target Java (declared support or bytecode) |
+| `MB-CMP-004` | error | The target Java is not in `javaSpecificationVersions` |
+| `MB-CMP-005` | error or warning | The runtime line does not support the Java version; a warning for runtime lines MuleSoft does not document |
+| `MB-CMP-006` | warning | A connector could not be inspected (managed version, not yet downloaded, unreadable JAR) |
+| `MB-CMP-007` | error | `minMuleVersion` is newer than the target runtime, which refuses to deploy it |
+| `MB-CMP-008` | info | The target Mule or Java version is unknown |
+| `MB-CMP-009` | warning | The runtime version is outside the built-in platform table |
+| `MB-TC-001` | error or warning | Maven's JDK is not supported by `app.runtime`, which MUnit runs on that JDK |
+| `MB-TC-002` | error | The MUnit version cannot run this JDK or runtime |
+| `MB-TC-003` | warning | A JDK pin (`.java-version`, `.tool-versions`, `mise.toml`, `.sdkmanrc`) disagrees with Maven or the target |
+| `MB-TC-004` | info | No JDK pin was found |
+| `MB-TC-005` | error | A connector does not support Maven's JDK, so MUnit cannot deploy it |
+| `MB-TC-006` | error or warning | The mule-maven-plugin version predates Java 17 support, or ignores `javaSpecificationVersions` |
+
+```bash
+mule-build compat
+mule-build compat --artifact target/sample-orders-system-api-1.0.0-mule-application.jar
 ```
 
 ## `strip`
@@ -164,8 +253,9 @@ mule-build mcp
 
 ## Exit behavior
 
-Commands exit non-zero on failure and print the first actionable cause. `enforce` exits non-zero when
-it finds an unsecured property, which is the intended CI signal rather than an error in the tool.
+Commands exit non-zero on failure and print the first actionable cause. `enforce` and `compat` exit
+non-zero on an error finding, which is the intended CI signal rather than an error in the tool.
+Warnings and info findings never change the exit code.
 
 ### Artifact handoff
 
@@ -176,5 +266,6 @@ an Exchange asset identity. Pass the verified artifact ID, version, and digest e
 publication preview. Exchange group IDs may differ from the Maven group; review that mapping.
 Missing or ambiguous Maven metadata and a packaged version mismatch fail the build result.
 
-Secure-reference enforcement checks configured property-name patterns only. It does not prove that
-all credentials are secure and does not replace the broader lint security assessment.
+The security gate is deliberately narrow: it fails only on secrets that are clearly present. It
+does not prove that all credentials are secure and does not replace the broader `mule-lint` security
+assessment.

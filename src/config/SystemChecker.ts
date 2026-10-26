@@ -99,9 +99,18 @@ async function compatibilityDetails(
   return details;
 }
 
+export interface SystemCheckOptions {
+  /**
+   * Include compatibility and toolchain details. Defaults to true; gates that cannot
+   * be blocked by them (build) skip the scan and its `mvn -v` probe.
+   */
+  compatibility?: boolean;
+}
+
 export async function runSystemChecks(
   cwd: string = process.cwd(),
-  operation: SystemCheckOperation = 'build'
+  operation: SystemCheckOperation = 'build',
+  options: SystemCheckOptions = {}
 ): Promise<Result<SystemCheckResult>> {
   const maven = await isMavenInstalled();
   const pomXml = pomExists(cwd);
@@ -171,7 +180,9 @@ export async function runSystemChecks(
     },
   ];
 
-  if (pomXml) details.push(...(await compatibilityDetails(cwd, operation, maven)));
+  if (pomXml && (options.compatibility ?? true)) {
+    details.push(...(await compatibilityDetails(cwd, operation, maven)));
+  }
 
   if (releaseRequired) {
     details.push({
@@ -212,7 +223,8 @@ export async function runSystemChecks(
 }
 
 export async function canBuild(cwd: string = process.cwd()): Promise<Result<void>> {
-  const checks = await runSystemChecks(cwd, 'build');
+  // No compatibility or toolchain finding blocks a build; package runs its own artifact gate.
+  const checks = await runSystemChecks(cwd, 'build', { compatibility: false });
   if (!checks.success || !checks.data?.ready) {
     const failures = checks.data?.details
       .filter((detail) => detail.required && !detail.passed)

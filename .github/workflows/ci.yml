@@ -105,6 +105,15 @@ jobs:
           java-version: '17'
           cache: maven
 
+      # Pin Maven: the runner image's newer Maven breaks the Mule Maven plugin's resolver API.
+      - name: Setup Maven 3.9.9
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.9/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain
+        run: mvn -v
+
       - name: Build mule-build
         run: |
           npm ci

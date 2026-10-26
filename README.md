@@ -82,10 +82,30 @@ mule-build package
 # Production policy from mule-build.yaml
 mule-build package --profile production
 
+# Secrets that would ship in the JAR, and connector/runtime/JDK compatibility
+mule-build enforce
+mule-build compat
+
 # Release preview: no POM, commit, tag, or remote changes
 mule-build doctor --operation release
 mule-build release --bump patch --dry-run
 ```
+
+## Security and compatibility gates
+
+- `enforce` fails when a secret would ship in the artifact: a sensitive reference without
+  `secure::`, a literal credential in a connector configuration, or a plaintext value in a shipped
+  YAML or `.properties` file. It accepts both secret models: encrypted Secure Configuration Properties
+  (`${secure::key}`) and platform secure properties (`${key}` listed in `mule-artifact.json`
+  `secureProperties`). See [Secret models](docs/design.md#secret-models).
+- `compat` checks each connector's `minMuleVersion` and Java support, read from the connector JARs,
+  against `mule-artifact.json`, `app.runtime`, and the declared `target`. It also checks the JDK
+  Maven and MUnit run on.
+- The `production` profile runs both gates around the build. Other builds report warnings.
+
+Every result is a finding with a stable code (`MB-SEC-*`, `MB-CMP-*`, `MB-TC-*`) and a fix. Findings
+never contain secret values. Codes are listed under [`enforce`](docs/cli.md#enforce) and
+[`compat`](docs/cli.md#compat).
 
 For CI and agent configuration, pin the command so every machine runs the same release:
 
@@ -96,7 +116,8 @@ npx -y @sfdxy/mule-build@3.1.0 package
 
 ## MCP and JavaScript API
 
-The MCP server exposes ten stable tools and packaged guidance:
+The MCP server exposes eleven stable tools, including the read-only `check_compatibility`, and
+packaged guidance:
 
 ```bash
 npx -y @sfdxy/mule-build@3.1.0 mcp

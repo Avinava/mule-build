@@ -79,7 +79,7 @@ see the [ecosystem boundary](ecosystem.md).
 
 | Operation | Reads | Writes |
 | --- | --- | --- |
-| `doctor`, `enforce`, release `--dry-run` | project and environment | nothing |
+| `doctor`, `enforce`, `compat`, release `--dry-run` | project and environment | nothing |
 | `test` | project | Maven test output under `target/` |
 | `package` | project | build output under `target/` |
 | `package --strip-secure` | project | temporary copy and `target/`; source stays unchanged |

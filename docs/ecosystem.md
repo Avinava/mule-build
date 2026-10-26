@@ -25,6 +25,30 @@ flowchart LR
     Skills --> Connect
 ```
 
+## mule-build and mule-lint
+
+Both tools look at secrets, at different points:
+
+- `mule-lint` is broad, authoring-time static analysis of source: style, heuristics, and many rules.
+- `mule-build enforce` and the `package` gate cover only what ships inside the artifact, and fail only
+  on secrets that are clearly present. They work without `mule-lint` installed.
+
+Both tools classify sensitive keys identically, and
+`test/fixtures/sensitive-key-vectors.json` holds the shared cases. Connector compatibility
+(`MB-CMP-*`) and toolchain checks (`MB-TC-*`) need resolved connector JARs and the local JDK, so only
+`mule-build` runs them. Neither tool reads the other's reports or exit codes.
+
+Rules that cover the same ground, as of mule-lint 2.1.0:
+
+| mule-build | mule-lint | Notes |
+| --- | --- | --- |
+| `MB-SEC-002` | `MULE-201`, `SEC-008` | `SEC-008` covers a literal `secure-properties:config` key |
+| `MB-SEC-003` | `CFG-003` (`.properties`), `YAML-004` (YAML) | |
+| `MB-SEC-004` | `SEC-019` | Both are warnings |
+| `MB-SEC-006` | `SEC-017` | Both are errors |
+| `MB-SEC-007` | `SEC-018` | Both are warnings |
+| `MB-CMP-005` (descriptor Java vs `minMuleVersion`) | `OPS-005` | mule-lint warns only when no declared Java version is supported |
+
 ## A note on the name
 
 The `mule-build` skill in `mule-skills` and this `mule-build` MCP server share a name but are different

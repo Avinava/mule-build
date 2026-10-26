@@ -13,9 +13,10 @@ profiles:
   production:
     description: 'CI/CD Artifacts'
     mavenProfile: 'prod' # Maps to <id>prod</id> in pom.xml
-    secureProperties: 'enforce' # Validate all sensitive props have 'secure::'
+    secureProperties: 'enforce' # Fail on secrets and unsecured references before building
     includeSource: false # Do not include source code
     enforceGitClean: true # Require clean git tree
+    compatibility: 'enforce' # Fail when packaged connectors disagree with the target (enforce | warn | off)
 
   # Custom profile example for staging
   # staging:
@@ -32,3 +33,17 @@ runtime:
     - '~/muleRuntimes'
   # Reject fallbacks that do not match the runtime declared by .classpath
   strictVersion: true
+
+# Deployment target for compatibility checks. Defaults: pom.xml <app.runtime> and
+# mule-artifact.json javaSpecificationVersions.
+# target:
+#   muleVersion: '4.6.6'
+#   javaVersion: '17'
+
+# Security gate settings
+# security:
+#   sensitiveKeys: ['vendorPin'] # Extra key endings treated as secrets
+#   allow: # Reviewed exceptions; reason is required
+#     - file: 'src/main/resources/sample.yaml'
+#       key: 'sample.demo.password'
+#       reason: 'Public demo value'

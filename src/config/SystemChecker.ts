@@ -1,6 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Result, ResolvedRuntime, ok, err } from '../types/index.js';
+import {
+  FindingCategory,
+  FindingSeverity,
+  Result,
+  ResolvedRuntime,
+  ok,
+  err,
+} from '../types/index.js';
+import { evaluateProjectCompatibility } from '../api/compat.js';
 import { isMavenInstalled } from '../engine/MavenBuilder.js';
 import { pomExists } from '../engine/PomParser.js';
 import { resolveRuntime } from '../engine/RuntimeResolver.js';
@@ -15,6 +23,9 @@ export interface SystemCheckDetail {
   passed: boolean;
   message: string;
   remediation?: string;
+  /** Stable finding code for compatibility and toolchain details. */
+  code?: string;
+  severity?: FindingSeverity;
 }
 
 export interface SystemCheckResult {
@@ -39,6 +50,53 @@ function pomHasPlugin(cwd: string, artifactId: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Compatibility and toolchain findings as readiness details. Toolchain errors block
+ * test and run, where Maven and MUnit would fail; compatibility errors block release.
+ */
+async function compatibilityDetails(
+  cwd: string,
+  operation: SystemCheckOperation,
+  mavenInstalled: boolean
+): Promise<SystemCheckDetail[]> {
+  const report = await evaluateProjectCompatibility(cwd, { toolchain: mavenInstalled });
+  if (!report.success || !report.data) {
+    return [
+      {
+        component: 'compatibility',
+        required: false,
+        passed: false,
+        message: `Compatibility could not be checked: ${report.error?.message}`,
+      },
+    ];
+  }
+  const blocking: Record<FindingCategory, SystemCheckOperation[]> = {
+    toolchain: ['test', 'run'],
+    compatibility: ['release'],
+    security: [],
+  };
+  const findings = report.data.findings;
+  const details = findings.map((finding): SystemCheckDetail => ({
+    component: finding.category,
+    code: finding.code,
+    severity: finding.severity,
+    required: finding.severity === 'error' && blocking[finding.category].includes(operation),
+    passed: false,
+    message: finding.message,
+    remediation: finding.remediation,
+  }));
+  if (!findings.some((finding) => finding.severity !== 'info')) {
+    const { muleVersion, javaVersion } = report.data.target;
+    details.unshift({
+      component: 'compatibility',
+      required: false,
+      passed: true,
+      message: `Connectors, descriptor, and toolchain agree with Mule ${muleVersion ?? 'unknown'} / Java ${javaVersion ?? 'unknown'}`,
+    });
+  }
+  return details;
 }
 
 export async function runSystemChecks(
@@ -112,6 +170,8 @@ export async function runSystemChecks(
         : 'Install the project-compatible runtime or configure runtime.home/searchPaths.',
     },
   ];
+
+  if (pomXml) details.push(...(await compatibilityDetails(cwd, operation, maven)));
 
   if (releaseRequired) {
     details.push({

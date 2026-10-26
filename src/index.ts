@@ -12,11 +12,13 @@ export {
   releaseVersion,
   stripSecure,
   enforceSecure,
+  checkCompatibility,
   systemCheck,
   getRuntimeStatus,
   stopRuntime,
 } from './api/index.js';
 export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from './api/index.js';
+export type { CompatibilityOptions, CompatibilityReport, ConnectorReport } from './api/index.js';
 
 // Types
 export type {
@@ -33,6 +35,14 @@ export type {
   StripResult,
   EnforceOptions,
   EnforceResult,
+  Finding,
+  FindingSeverity,
+  FindingCategory,
+  SecurityRule,
+  TargetConfig,
+  SecurityConfig,
+  SecurityAllowEntry,
+  GateMode,
   DeploymentInfo,
   BuildProfile,
   BuildEnvironment,

@@ -43,8 +43,44 @@ does not publish or deploy the artifact.
 mule-build enforce
 ```
 
-`enforce` is read-only. It exits non-zero when a sensitive property such as a password does not use
-`secure::`, making it suitable for CI.
+`enforce` is read-only. It exits non-zero when a secret would ship in the artifact: a sensitive
+reference without `secure::`, a literal credential in a connector configuration, or a plaintext value
+in a shipped YAML or `.properties` file. That makes it suitable for CI. Values are redacted in every
+finding.
+
+## Bump a connector safely
+
+Connector releases raise their minimum runtime and change their Java support, and the application
+descriptor does not update itself. After changing a connector version:
+
+```bash
+mvn -q dependency:resolve        # make the new connector JAR available locally
+mule-build compat
+```
+
+`compat` names the connector that sets the floor and the exact value to change, for example
+`"minMuleVersion": "4.6.6"` in `mule-artifact.json` or `<app.runtime>`. A `production` package repeats
+the check on the connectors inside the built JAR. Declare the deployment target once so the check
+matches where the application runs:
+
+```yaml
+target:
+  muleVersion: 4.6.6
+  javaVersion: "17"
+```
+
+## Pin the JDK, MUnit, and runtime together
+
+MUnit runs the embedded `app.runtime` on the JDK Maven uses, so these three move together. Pin the JDK
+in the project and let `doctor` confirm the combination before tests run:
+
+```bash
+echo 17 > .java-version
+mule-build doctor --operation test
+```
+
+A mismatch fails with a code and the exact fix, for example `MB-TC-001` when Maven runs a JDK the
+runtime does not support, or `MB-TC-002` when MUnit is older than 3.1.0 on Java 17.
 
 For a local build that cannot resolve secure values:
 
@@ -61,13 +97,15 @@ Pin the version and keep the stages visible:
 
 ```yaml
 - name: Check Mule build prerequisites
-  run: npx -y @sfdxy/mule-build@3.0.0 doctor --operation test
-- name: Enforce secure property references
-  run: npx -y @sfdxy/mule-build@3.0.0 enforce
+  run: npx -y @sfdxy/mule-build@3.1.0 doctor --operation test
+- name: Check for secrets in the artifact sources
+  run: npx -y @sfdxy/mule-build@3.1.0 enforce
+- name: Check connector and runtime compatibility
+  run: npx -y @sfdxy/mule-build@3.1.0 compat
 - name: Run MUnit
-  run: npx -y @sfdxy/mule-build@3.0.0 test
+  run: npx -y @sfdxy/mule-build@3.1.0 test
 - name: Package
-  run: npx -y @sfdxy/mule-build@3.0.0 package --skip-tests
+  run: npx -y @sfdxy/mule-build@3.1.0 package --skip-tests
 ```
 
 The last step deliberately skips a second test run because the preceding step already ran MUnit.

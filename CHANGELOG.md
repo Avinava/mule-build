@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.1.0 - 2026-10-26
+
+### Added
+
+- `compat` command, `checkCompatibility` API, and read-only `check_compatibility` MCP tool. They check
+  connector `minMuleVersion` and Java support (read from each plugin's descriptor,
+  `@JavaVersionSupport`, and bytecode) against `mule-artifact.json`, `app.runtime`, the Studio runtime,
+  and a declared `target`. Facts come from the packaged JAR or the local Maven repository; nothing is
+  downloaded.
+- Toolchain checks for the JDK Maven runs on, MUnit, mule-maven-plugin, and JDK pin files
+  (`.java-version`, `.tool-versions`, `mise.toml`, `.sdkmanrc`). They appear in `doctor` and `compat`.
+- Security rules for literal credentials in Mule XML (`MB-SEC-002`), plaintext secrets in shipped
+  YAML and `.properties` files (`MB-SEC-003`), unused sensitive keys (`MB-SEC-004`), and mismatched
+  secret models (`MB-SEC-006`, `MB-SEC-007`). Platform secure properties listed in `mule-artifact.json`
+  `secureProperties` are recognized as secured.
+- Typed `Finding` results with stable codes, severities, and remediation on `EnforceResult.findings`,
+  `PackageResult.findings`, and `SystemCheckDetail.code`. Findings never contain secret values.
+- `mule-build.yaml` keys: `target.muleVersion`, `target.javaVersion`, `security.sensitiveKeys`,
+  `security.allow`, and the profile setting `compatibility: enforce | warn | off`.
+- `enforce --rules` and the MCP `rules`/`file` inputs select rule groups.
+
+### Changed
+
+- `enforce` runs every security rule by default and scans `src/main/resources` as well as
+  `src/main/mule`, so it can now exit non-zero where 3.0 passed. Use `--rules references` for the 3.0
+  scope.
+- Profiles with `secureProperties: enforce`, including the built-in `production`, fail on any security
+  error before Maven runs. The built-in `production` profile also fails when connectors packaged in the
+  JAR are incompatible with the target. Set `compatibility: warn` or `off` to opt out.
+- The property holding the `secure-properties:config` decryption key is no longer reported as an
+  unsecured reference.
+- The sample application pins Java 17, declares its target, and uses mule-maven-plugin 4.5.1 so its
+  `javaSpecificationVersions` is honored.
+
 ## 3.0.0 - 2026-10-03
 
 ### Changed

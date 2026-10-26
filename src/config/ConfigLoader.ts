@@ -15,8 +15,11 @@ const ProfileSchema = z
     secureProperties: z.enum(['strip', 'enforce', 'unchanged']).optional(),
     includeSource: z.boolean().optional(),
     enforceGitClean: z.boolean().optional(),
+    compatibility: z.enum(['enforce', 'warn', 'off']).optional(),
   })
   .strict();
+
+const VersionSchema = z.union([z.string().min(1), z.number()]).transform(String);
 
 const ConfigSchema = z
   .object({
@@ -30,6 +33,30 @@ const ConfigSchema = z
         home: z.string().min(1).optional(),
         searchPaths: z.array(z.string().min(1)).optional(),
         strictVersion: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    target: z
+      .object({
+        muleVersion: VersionSchema.optional(),
+        javaVersion: VersionSchema.optional(),
+      })
+      .strict()
+      .optional(),
+    security: z
+      .object({
+        sensitiveKeys: z.array(z.string().min(1)).optional(),
+        allow: z
+          .array(
+            z
+              .object({
+                file: z.string().min(1),
+                key: z.string().min(1),
+                reason: z.string().min(1),
+              })
+              .strict()
+          )
+          .optional(),
       })
       .strict()
       .optional(),
@@ -65,6 +92,8 @@ export function loadConfig(cwd: string = process.cwd()): Result<MuleBuildConfig>
     project: { ...base.project, ...fileConfig.project },
     profiles: { ...base.profiles, ...fileConfig.profiles },
     runtime: { ...base.runtime, ...fileConfig.runtime },
+    target: { ...fileConfig.target },
+    security: { ...fileConfig.security },
   };
 
   if (!config.project?.name) {

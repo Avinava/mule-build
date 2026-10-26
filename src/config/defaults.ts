@@ -14,6 +14,7 @@ export const DEFAULT_PROFILES: Record<string, ProfileConfig> = {
     secureProperties: 'enforce',
     includeSource: false,
     enforceGitClean: true,
+    compatibility: 'enforce',
   },
 };
 

@@ -23,10 +23,10 @@ anything shared so each machine gets the same build behavior.
 Command-line registration, where the host supports it:
 
 ```bash
-codex mcp add mule-build -- npx -y @sfdxy/mule-build@3.0.0 mcp
+codex mcp add mule-build -- npx -y @sfdxy/mule-build@3.1.0 mcp
 codex mcp list
 
-claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@3.0.0 mcp
+claude mcp add --scope user mule-build -- npx -y @sfdxy/mule-build@3.1.0 mcp
 claude mcp list
 ```
 
@@ -40,7 +40,7 @@ The `mcpServers` form, used by Claude Code, Copilot CLI, and Gemini:
   "mcpServers": {
     "mule-build": {
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@3.0.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@3.1.0", "mcp"]
     }
   }
 }
@@ -54,7 +54,7 @@ VS Code wraps the same entry in `servers` and wants an explicit transport:
     "mule-build": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@sfdxy/mule-build@3.0.0", "mcp"]
+      "args": ["-y", "@sfdxy/mule-build@3.1.0", "mcp"]
     }
   }
 }
@@ -77,7 +77,8 @@ working directory is not the project root.
 | `run_app` | Build, start a compatible runtime if needed, deploy | Starts a runtime |
 | `check_runtime_status` | Actual status of the resolved runtime | No |
 | `stop_runtime` | Stop the resolved runtime | Stops a runtime |
-| `enforce_security` | Scan for sensitive properties missing `secure::` | No |
+| `enforce_security` | Find secrets that would ship in the artifact: references missing `secure::`, hardcoded XML credentials, plaintext config secrets, mismatched secret models. Optional `file` and `rules` | No |
+| `check_compatibility` | Check connectors, `mule-artifact.json`, Maven JDK, and MUnit against the target Mule runtime and Java. Optional `artifact` and `toolchain` | No |
 | `strip_secure` | Remove `secure::` prefixes. Dry-run by default | Only when confirmed |
 | `release_version` | Preview or execute a transactional release | Only with `confirm: true` |
 
@@ -91,8 +92,14 @@ to say so twice.
 | Prompt | What it drives |
 | --- | --- |
 | `quick-start` | Orient in an unfamiliar Mule project and check readiness |
-| `release-checklist` | Readiness, then security scan, then a previewed release awaiting confirmation |
-| `security-audit` | Find unsecured sensitive properties and explain the exposure |
+| `release-checklist` | Readiness, security scan, and compatibility check, then a previewed release awaiting confirmation |
+| `security-audit` | Find secrets and unsecured properties and explain the exposure |
+
+Security and compatibility results carry `findings`: each has a stable `code`, a `severity`
+(`error`, `warning`, or `info`), a `message`, an optional `file`/`line`, and a `remediation`. Codes are
+listed in the [CLI reference](cli.md#enforce). `run_build` returns non-blocking findings in its result,
+and `system_check` includes compatibility and toolchain details with their codes. Findings never
+contain secret values.
 
 ## Resources
 

@@ -42,6 +42,32 @@ function findDirectProjectChild(content: string, childName: string): ElementRang
   return undefined;
 }
 
+/** Content range of the element at `path`, e.g. ['project', 'build', 'plugins']. */
+function findElementPath(content: string, path: string[]): ElementRange | undefined {
+  const tags = /<(\/)?([A-Za-z_][\w:.-]*)(?:\s[^<>]*?)?(\/?)>/g;
+  const stack: string[] = [];
+  const atPath = () => stack.length === path.length && path.every((name, i) => stack[i] === name);
+  let start: number | undefined;
+  let match: RegExpExecArray | null;
+  while ((match = tags.exec(content))) {
+    const name = match[2].split(':').pop()!;
+    if (match[1]) {
+      if (atPath() && start !== undefined) return { contentStart: start, contentEnd: match.index };
+      stack.pop();
+      continue;
+    }
+    if (match[3]) continue;
+    stack.push(name);
+    if (atPath()) start = tags.lastIndex;
+  }
+  return undefined;
+}
+
+function sliceAt(content: string, path: string[]): string | undefined {
+  const range = findElementPath(content, path);
+  return range ? content.slice(range.contentStart, range.contentEnd) : undefined;
+}
+
 function getDirectProjectValue(content: string, name: string): string | undefined {
   const range = findDirectProjectChild(content, name);
   return range ? content.slice(range.contentStart, range.contentEnd).trim() : undefined;
@@ -163,13 +189,9 @@ export function getPomProperties(content: string): Record<string, string> {
   return properties;
 }
 
-/** Direct `<dependencies>` of the project (not dependencyManagement or plugin dependencies). */
-export function getDependencies(content: string): PomDependency[] {
-  const source = stripXmlComments(content);
-  const range = findDirectProjectChild(source, 'dependencies');
-  if (!range) return [];
-  const properties = getPomProperties(source);
-  return blocks(source.slice(range.contentStart, range.contentEnd), 'dependency').map((block) => {
+function readDependencies(body: string | undefined, properties: Record<string, string>) {
+  if (body === undefined) return [];
+  return blocks(body, 'dependency').map((block): PomDependency => {
     const own = block.replace(/<exclusions>[\s\S]*?<\/exclusions>/g, '');
     const read = (name: string) => {
       const value = childText(own, name);
@@ -185,15 +207,54 @@ export function getDependencies(content: string): PomDependency[] {
   });
 }
 
-/** Version of a build plugin declared under the project `<build><plugins>`. */
+/**
+ * Direct `<dependencies>` of the project (not plugin dependencies). An omitted
+ * version is filled from the project's own `<dependencyManagement>`; versions from
+ * a parent or an imported BOM stay undefined.
+ */
+export function getDependencies(content: string): PomDependency[] {
+  const source = stripXmlComments(content);
+  const properties = getPomProperties(source);
+  const managed = readDependencies(
+    sliceAt(source, ['project', 'dependencyManagement', 'dependencies']),
+    properties
+  );
+  return readDependencies(sliceAt(source, ['project', 'dependencies']), properties).map(
+    (dependency) => {
+      if (dependency.version !== undefined) return dependency;
+      const match = managed.find(
+        (entry) =>
+          entry.groupId === dependency.groupId &&
+          entry.artifactId === dependency.artifactId &&
+          entry.classifier === dependency.classifier &&
+          entry.version !== undefined
+      );
+      return match ? { ...dependency, version: match.version } : dependency;
+    }
+  );
+}
+
+function findPlugin(body: string | undefined, artifactId: string): string | undefined {
+  if (body === undefined) return undefined;
+  return blocks(body, 'plugin')
+    .map((block) => block.replace(/<(dependencies|configuration|executions)>[\s\S]*?<\/\1>/g, ''))
+    .find((block) => childText(block, 'artifactId') === artifactId);
+}
+
+/**
+ * Version of a plugin declared under the project `<build><plugins>`. A plugin that
+ * only appears in `<pluginManagement>` is not part of the build and returns
+ * undefined; a declared plugin without a version takes the managed version.
+ */
 export function getPluginVersion(content: string, artifactId: string): string | undefined {
   const source = stripXmlComments(content);
-  const range = findDirectProjectChild(source, 'build');
-  if (!range) return undefined;
-  const plugin = blocks(source.slice(range.contentStart, range.contentEnd), 'plugin')
-    .map((block) => block.replace(/<(dependencies|configuration)>[\s\S]*?<\/\1>/g, ''))
-    .find((block) => childText(block, 'artifactId') === artifactId);
-  const version = plugin && childText(plugin, 'version');
+  const plugin = findPlugin(sliceAt(source, ['project', 'build', 'plugins']), artifactId);
+  if (plugin === undefined) return undefined;
+  const managed = findPlugin(
+    sliceAt(source, ['project', 'build', 'pluginManagement', 'plugins']),
+    artifactId
+  );
+  const version = childText(plugin, 'version') ?? (managed && childText(managed, 'version'));
   return version === undefined ? undefined : interpolate(version, getPomProperties(source));
 }
 

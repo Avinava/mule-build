@@ -30,6 +30,9 @@ The adapters own presentation and confirmation policy. API functions own orchest
 - A version override updates only a staged POM; the JAR metadata must match the requested version.
 - Artifact coordinates come from embedded Maven metadata and SHA-256 covers the returned bytes.
 - A strip build happens in a temporary staged project; it does not rewrite the checkout.
+- Every packaged JAR carries `META-INF/mule-build/build-info.json` (`src/engine/BuildInfo.ts`). A strip
+  build is marked `stripped: true, productionDeployable: false`. The entry is appended without
+  rewriting existing ZIP entries, and a project that ships its own copy of that path fails the build.
 - Releases preview without mutation when `dryRun` is true. Pushes target the current branch and the newly-created tag only.
 - Runtime state comes from the Mule control command and optional port probes, not directory existence.
 - MCP stdout is reserved for JSON-RPC; diagnostics use stderr.
@@ -125,4 +128,8 @@ This ordering avoids leaving a newly-started runtime behind after a failed build
 
 ## Release transaction limits
 
-The release API restores `pom.xml` if the commit step fails. Once a commit or tag exists, failures are reported as partial state with explicit recovery guidance; history is not rewritten automatically. This avoids destructive rollback in shared repositories.
+A release is a transaction. Version, tag-history, branch, and remote checks all run before the first
+change. The branch and tag go out in one `git push --atomic`, so a failure at any step leaves nothing
+on the remote. The release then rolls back only local state it created itself: it deletes the new tag,
+undoes the release commit with `git reset --soft`, and restores the original `pom.xml` bytes. Shared
+history is never rewritten. If the rollback itself fails, the error names what is left to repair.

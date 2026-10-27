@@ -5,9 +5,11 @@
  */
 
 import { join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { Result, ok, err, StripOptions, StripResult } from '../types/index.js';
-import { stripSecure as stripSecureEngine } from '../engine/XmlProcessor.js';
+import { getXmlFiles, stripSecure as stripSecureEngine } from '../engine/XmlProcessor.js';
+import { recordStrip, secureKeys } from '../engine/StripDetection.js';
+import { projectPath } from '../utils/files.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -39,6 +41,30 @@ export async function stripSecure(options: StripOptions = {}): Promise<Result<St
 
   if (options.dryRun) {
     logger.info('Running in dry-run mode. No files will be modified.');
+  }
+
+  // Keys that lose their secure:: prefix, read before the files are rewritten.
+  const files = statSync(target).isDirectory() ? getXmlFiles(target) : [target];
+  const stripped = options.dryRun
+    ? []
+    : files
+        .map((file) => {
+          const name = projectPath(cwd, file);
+          return { file: name, keys: secureKeys(readFileSync(file, 'utf-8'), name) };
+        })
+        .filter((entry) => entry.keys.length > 0);
+
+  // Record the intent before any file changes, so a partial strip (a later file
+  // fails to write) is still tracked. Detection only counts keys that are still
+  // unprefixed, so recording a file the strip never reached is harmless.
+  try {
+    recordStrip(cwd, stripped);
+  } catch (error) {
+    return err(
+      new Error(
+        `Could not write the strip record, so no files were changed: ${(error as Error).message}`
+      )
+    );
   }
 
   const result = await stripSecureEngine(target, {

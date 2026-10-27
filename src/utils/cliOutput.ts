@@ -38,6 +38,7 @@ export function releaseSummaryLines(
     const lines = [`Release preview: ${result.previousVersion} -> ${result.newVersion}`];
     lines.push(`  Tag: ${planned.tag ? (result.tagName ?? `v${result.newVersion}`) : 'skipped'}`);
     lines.push(`  Push: ${planned.push ? 'planned' : 'skipped'}`);
+    for (const warning of result.warnings ?? []) lines.push(`  Warning: ${warning}`);
     lines.push('  No files, commits, tags, or remotes were changed.');
     return lines;
   }

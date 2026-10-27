@@ -137,10 +137,27 @@ export interface PropertyReference {
 
 const REFERENCE_SITES = [/\$\{(secure::)?([^}]+)\}/g, /\bp\(\s*['"](secure::)?(.+?)['"]\s*\)/g];
 
-/** Every property reference in XML or DataWeave content, with line numbers. */
-export function collectReferenceSites(content: string, file: string): PropertyReference[] {
+/** Blank out XML comments only, keeping CDATA (inline DataWeave and scripts). */
+function maskXmlComments(content: string): string {
+  return content.replace(/<!--[\s\S]*?-->/g, (block) => block.replace(/[^\n]/g, ' '));
+}
+
+/**
+ * Every property reference in XML or DataWeave content, with line numbers.
+ * XML comments are ignored. CDATA is ignored too unless `includeCdata` is set;
+ * Mule runs inline DataWeave from CDATA, so strip tracking includes it.
+ */
+export function collectReferenceSites(
+  content: string,
+  file: string,
+  options: { includeCdata?: boolean } = {}
+): PropertyReference[] {
   const sites: PropertyReference[] = [];
-  const masked = file.endsWith('.xml') ? maskXmlNonMarkup(content) : content;
+  const masked = !file.endsWith('.xml')
+    ? content
+    : options.includeCdata
+      ? maskXmlComments(content)
+      : maskXmlNonMarkup(content);
   for (const pattern of REFERENCE_SITES) {
     for (const match of masked.matchAll(pattern)) {
       const name = match[2].trim();

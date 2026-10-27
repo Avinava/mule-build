@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
+import { createProgram } from '../src/cli.js';
 import { packageSummaryLines, releaseSummaryLines } from '../src/utils/cliOutput.js';
+
+describe('CLI release options', () => {
+  it('offers prerelease bumps and an explicit version instead of a required bump', () => {
+    const release = createProgram().commands.find((command) => command.name() === 'release')!;
+    const options = Object.fromEntries(release.options.map((option) => [option.long, option]));
+    expect(Object.keys(options)).toEqual(
+      expect.arrayContaining(['--bump', '--preid', '--version', '--dry-run'])
+    );
+    expect(options['--bump'].mandatory).toBe(false);
+    expect(options['--bump'].description).toContain('prerelease');
+  });
+
+  it('passes --version after a command to the command, not the tool version flag', async () => {
+    const program = createProgram();
+    const release = program.commands.find((command) => command.name() === 'release')!;
+    let received: unknown;
+    release.action((options) => {
+      received = options.version;
+    });
+    await program.parseAsync(['node', 'mule-build', 'release', '--version', '1.4.3', '--dry-run']);
+    expect(received).toBe('1.4.3');
+  });
+});
 
 describe('CLI summaries', () => {
   it('shows verified identity separately from the display filename', () => {

@@ -29,8 +29,15 @@ import { getXmlFiles, removeSecurePropertiesConfig, stripSecure } from '../engin
 import { findBuiltJar, mavenBuild } from '../engine/MavenBuilder.js';
 import { getPomInfo, getProjectName, setVersion } from '../engine/PomParser.js';
 import { inspectArtifact } from '../engine/ArtifactIdentity.js';
+import { BUILD_INFO_PATH, addBuildInfo, createBuildInfo } from '../engine/BuildInfo.js';
+import {
+  STRIP_STATE_PATH,
+  StripEvidence,
+  detectStrippedSources,
+} from '../engine/StripDetection.js';
 import { isWorkingTreeClean } from '../utils/git.js';
 import { logger } from '../utils/logger.js';
+import { PACKAGE_VERSION } from '../version.js';
 
 function safeName(value: string): string {
   return (
@@ -49,6 +56,25 @@ function gateError(gate: string, findings: Finding[]): Error {
       ...errors.map((finding) => `  ${formatFinding(finding)}`),
     ].join('\n')
   );
+}
+
+function strippedSourceFinding(evidence: StripEvidence): Finding {
+  const record = evidence.file === STRIP_STATE_PATH;
+  return {
+    code: 'MB-SEC-008',
+    severity: 'warning',
+    category: 'security',
+    message: record
+      ? `${STRIP_STATE_PATH} is unreadable, so the sources are treated as stripped`
+      : evidence.reason === 'encrypted-value'
+        ? `${evidence.key} has an encrypted value but is referenced without secure::, so the sources were stripped`
+        : `${evidence.key} was unprefixed by mule-build strip and is still referenced without secure::`,
+    file: evidence.file,
+    line: record ? undefined : evidence.line,
+    remediation: record
+      ? `Restore the secure:: references, then delete ${STRIP_STATE_PATH}.`
+      : `Restore \${secure::${evidence.key}}. The JAR is marked productionDeployable=false until then.`,
+  };
 }
 
 function createStagedProject(cwd: string): string {
@@ -125,6 +151,25 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
   const projectName = safeName(nameResult.data ?? pom.data.artifactId);
 
   try {
+    // Sources stripped in place (by `mule-build strip` or by hand) are as unfit for
+    // production as a --strip-secure build, so they get the same marker.
+    const strippedSources = processMode === 'strip' ? [] : detectStrippedSources(cwd);
+    if (strippedSources.length > 0) {
+      const where = strippedSources
+        .slice(0, 5)
+        .map((item) => (item.key ? `${item.file}:${item.line} ${item.key}` : item.file))
+        .join(', ');
+      if (processMode === 'enforce') {
+        return err(
+          new Error(
+            `Sources were stripped in place: secure:: is missing at ${where}. Restore the secure:: references before a build with enforcing profile "${profileName}".`
+          )
+        );
+      }
+      findings.push(...strippedSources.map(strippedSourceFinding));
+      configChanges.push('Sources were stripped in place; marked not production deployable');
+    }
+
     if (processMode === 'enforce') {
       const enforcement = await scanSecurity({ cwd });
       if (!enforcement.success || !enforcement.data) {
@@ -182,7 +227,14 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     const jar = findBuiltJar(buildCwd);
     if (!jar.success || !jar.data) return err(jar.error ?? new Error('Built JAR not found'));
 
-    const bytes = readFileSync(jar.data);
+    const stripped = processMode === 'strip' || strippedSources.length > 0;
+    const buildInfo = createBuildInfo(stripped, PACKAGE_VERSION);
+    const bytes = addBuildInfo(readFileSync(jar.data), buildInfo);
+    // Mark the Maven output too, so no JAR from this build lacks the marker.
+    writeFileSync(jar.data, bytes);
+    configChanges.push(
+      `Wrote ${BUILD_INFO_PATH} (stripped=${stripped}, productionDeployable=${buildInfo.productionDeployable})`
+    );
     const identity = inspectArtifact(bytes, pom.data.artifactId);
     if (!identity.coordinates)
       return err(new Error('Built JAR is missing the project Maven metadata'));
@@ -257,6 +309,8 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
         `Version: ${version}`,
         `Built By: ${deploymentInfo.builtBy}`,
         `Machine: ${deploymentInfo.machine}`,
+        `Stripped: ${stripped}`,
+        `Production Deployable: ${buildInfo.productionDeployable}`,
         ...configChanges.map((change) => `- ${change}`),
         `Original JAR: ${basename(jar.data)}`,
         ...findings.map((finding) => `Finding: ${formatFinding(finding)}`),
@@ -266,6 +320,9 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     return ok({
       jarPath: finalPath,
       artifact,
+      stripped,
+      productionDeployable: buildInfo.productionDeployable,
+      buildInfo,
       deploymentInfo,
       metrics: build.data?.metrics,
       findings,

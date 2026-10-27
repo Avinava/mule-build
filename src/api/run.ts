@@ -1,4 +1,4 @@
-import { Result, RunOptions, RunResult, err } from '../types/index.js';
+import { Result, RunOptions, RunResult, err, ok } from '../types/index.js';
 import { canBuild } from '../config/SystemChecker.js';
 import { packageProject } from './package.js';
 import {
@@ -39,10 +39,13 @@ export async function runLocal(options: RunOptions = {}): Promise<Result<RunResu
     if (!started.success) return err(started.error!);
   }
 
-  return deployToLocal(
+  const deployed = await deployToLocal(
     packageResult.data.jarPath,
     cwd,
     options.runtimeHome,
     options.startupTimeoutMs
   );
+  if (!deployed.success || !deployed.data) return deployed;
+  const { stripped, productionDeployable, buildInfo } = packageResult.data;
+  return ok({ ...deployed.data, stripped, productionDeployable, buildInfo });
 }

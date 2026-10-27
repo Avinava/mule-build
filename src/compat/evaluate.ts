@@ -9,6 +9,7 @@
 import { Finding, FindingSeverity } from '../types/index.js';
 import type { ArtifactDescriptor, PluginFacts } from '../engine/MulePluginInspector.js';
 import type { JdkPin, MavenToolchain } from '../engine/Toolchain.js';
+import { compareMavenVersions } from '../engine/MavenVersion.js';
 import {
   CONNECTOR_JAVA_SOURCE,
   MIN_MULE_VERSION_SOURCE,
@@ -26,6 +27,45 @@ export interface ConnectorEntry {
   facts?: PluginFacts;
   /** Why facts are missing. */
   problem?: string;
+}
+
+/** MUnit component versions declared in pom.xml, with `${...}` resolved where possible. */
+export interface MunitVersions {
+  /** munit-maven-plugin version, or the munit.version property. */
+  plugin?: string;
+  /** com.mulesoft.munit:munit-runner dependency version. */
+  runner?: string;
+  /** com.mulesoft.munit:munit-tools dependency version. */
+  tools?: string;
+}
+
+const MUNIT_LABELS: Record<keyof MunitVersions, string> = {
+  plugin: 'munit-maven-plugin',
+  runner: 'munit-runner',
+  tools: 'munit-tools',
+};
+
+/**
+ * Compare Maven tool versions (MUnit, mule-maven-plugin) with Maven ordering, so
+ * 3.1.0-rc.1 and 3.1.0-SNAPSHOT sort before 3.1.0. Undefined when either is unresolved.
+ */
+function compareTooling(left: string | undefined, right: string | undefined): number | undefined {
+  const usable = (value?: string) =>
+    value !== undefined && /^\d/.test(value) && !value.includes('${');
+  return usable(left) && usable(right) ? compareMavenVersions(left!, right!) : undefined;
+}
+
+/** Resolved MUnit components, lowest first. Unresolved `${...}` versions are skipped. */
+function munitComponents(facts: CompatibilityFacts): { label: string; version: string }[] {
+  const versions = facts.munit ?? { plugin: facts.munitVersion };
+  return (Object.keys(MUNIT_LABELS) as (keyof MunitVersions)[])
+    .flatMap((key) => {
+      const version = versions[key];
+      return version && compareTooling(version, version) !== undefined
+        ? [{ label: MUNIT_LABELS[key], version }]
+        : [];
+    })
+    .sort((a, b) => compareTooling(a.version, b.version) ?? 0);
 }
 
 export type MuleVersionSource = 'config' | 'pom' | 'classpath';
@@ -47,7 +87,10 @@ export interface CompatibilityFacts {
   descriptor?: ArtifactDescriptor;
   descriptorFile?: string;
   connectors: ConnectorEntry[];
+  /** munit-maven-plugin version. Used only when `munit` is not given. */
   munitVersion?: string;
+  /** MUnit plugin, runner, and tools versions. */
+  munit?: MunitVersions;
   mavenPluginVersion?: string;
   /** Present when toolchain checks were requested. */
   toolchain?: { maven?: MavenToolchain; pins: JdkPin[] };
@@ -370,28 +413,48 @@ function evaluateToolchain(facts: CompatibilityFacts, connectors: PluginFacts[])
     }
   }
 
-  const munit = facts.munitVersion;
-  if (
-    munit &&
-    mavenJava &&
-    Number(mavenJava) >= 17 &&
-    (compareVersions(munit, TOOLING.munitJava17.version) ?? 0) < 0
-  ) {
+  const components = munitComponents(facts);
+  const lowest = components[0];
+  const highest = components[components.length - 1];
+  if (new Set(components.map((component) => component.version)).size > 1) {
     findings.push(
       toolchain(
-        'MB-TC-002',
-        'error',
-        `MUnit ${munit} does not support Java ${mavenJava}; Java 17 support starts at MUnit ${TOOLING.munitJava17.version}`,
-        `Set munit.version to ${TOOLING.munitJava17.version} or later.`,
-        { source: TOOLING.munitJava17.source },
+        'MB-TC-007',
+        'warning',
+        `MUnit versions differ: ${components.map((component) => `${component.label} ${component.version}`).join(', ')}`,
+        'Set munit-maven-plugin, munit-runner, and munit-tools to the same version, for example through one munit.version property.',
+        Object.fromEntries(components.map((component) => [component.label, component.version])),
         'pom.xml'
       )
     );
   }
   if (
+    lowest &&
+    mavenJava &&
+    Number(mavenJava) >= 17 &&
+    (compareTooling(lowest.version, TOOLING.munitJava17.version) ?? 0) < 0
+  ) {
+    findings.push(
+      toolchain(
+        'MB-TC-002',
+        'error',
+        `MUnit ${lowest.version} (${lowest.label}) does not support Java ${mavenJava}; Java 17 support starts at MUnit ${TOOLING.munitJava17.version}`,
+        `Set ${components
+          .filter(
+            (component) => (compareTooling(component.version, TOOLING.munitJava17.version) ?? 0) < 0
+          )
+          .map((component) => component.label)
+          .join(', ')} to ${TOOLING.munitJava17.version} or later.`,
+        { source: TOOLING.munitJava17.source, [lowest.label]: lowest.version },
+        'pom.xml'
+      )
+    );
+  }
+  const munit = highest?.version;
+  if (
     munit &&
     testRuntime &&
-    (compareVersions(munit, '3.0.0') ?? -1) >= 0 &&
+    Number(/^\d+/.exec(munit)?.[0] ?? 0) >= 3 &&
     (compareVersions(testRuntime, TOOLING.munit3MinMule.version) ?? 0) < 0
   ) {
     findings.push(
@@ -413,7 +476,7 @@ function evaluateToolchain(facts: CompatibilityFacts, connectors: PluginFacts[])
   if (
     plugin &&
     javaTargets.includes('17') &&
-    (compareVersions(plugin, TOOLING.mavenPluginJava17.version) ?? 0) < 0
+    (compareTooling(plugin, TOOLING.mavenPluginJava17.version) ?? 0) < 0
   ) {
     findings.push(
       toolchain(
@@ -429,7 +492,7 @@ function evaluateToolchain(facts: CompatibilityFacts, connectors: PluginFacts[])
   if (
     plugin &&
     facts.descriptor?.javaSpecificationVersions?.length &&
-    (compareVersions(plugin, TOOLING.mavenPluginJavaSpec.version) ?? 0) < 0
+    (compareTooling(plugin, TOOLING.mavenPluginJavaSpec.version) ?? 0) < 0
   ) {
     findings.push(
       toolchain(

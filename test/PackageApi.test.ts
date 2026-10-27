@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -10,9 +11,13 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { strToU8, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packageProject } from '../src/api/package.js';
+import { BUILD_INFO_PATH, readBuildInfo } from '../src/engine/BuildInfo.js';
+import { stripSecure } from '../src/api/strip.js';
+import { STRIP_STATE_PATH } from '../src/engine/StripDetection.js';
+import { PACKAGE_VERSION } from '../src/version.js';
 import { mavenBuild } from '../src/engine/MavenBuilder.js';
 import { getVersion } from '../src/engine/PomParser.js';
 import { inspectArtifact } from '../src/engine/ArtifactIdentity.js';
@@ -132,6 +137,179 @@ describe('verified package handoff', () => {
     expect(result.error?.message).toContain('symbolic link');
     expect(readFileSync(original, 'utf8')).toBe(xml);
     expect(mavenBuild).not.toHaveBeenCalled();
+  });
+
+  it('marks a stripped build as not production deployable inside the JAR', async () => {
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow>${secure::sample.password}</flow>'
+    );
+    const result = await packageProject({ cwd: root, stripSecure: true });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      stripped: true,
+      productionDeployable: false,
+      buildInfo: {
+        schemaVersion: 1,
+        tool: 'mule-build',
+        toolVersion: PACKAGE_VERSION,
+        stripped: true,
+        productionDeployable: false,
+      },
+    });
+    const bytes = readFileSync(result.data!.jarPath);
+    const marker = JSON.parse(strFromU8(unzipSync(bytes)[BUILD_INFO_PATH]));
+    expect(marker).toEqual(result.data!.buildInfo);
+    expect(Object.keys(marker).sort()).toEqual(
+      ['productionDeployable', 'schemaVersion', 'stripped', 'tool', 'toolVersion'].sort()
+    );
+    expect(result.data?.artifact.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(readFileSync(join(root, 'target/deployment-info.txt'), 'utf8')).toContain(
+      'Production Deployable: false'
+    );
+  });
+
+  it('writes stripped=false into every non-stripped JAR, including the Maven output', async () => {
+    const result = await packageProject({ cwd: root });
+    expect(result.data).toMatchObject({ stripped: false, productionDeployable: true });
+    expect(readBuildInfo(readFileSync(result.data!.jarPath))).toEqual(result.data!.buildInfo);
+    expect(
+      readBuildInfo(readFileSync(join(root, 'target/sample-mule-application.jar')))
+    ).toMatchObject({ stripped: false, productionDeployable: true });
+  });
+
+  it('marks a normal build non-deployable after an in-place strip (strip-state record)', async () => {
+    const flow = join(root, 'src/main/mule/sample.xml');
+    writeFileSync(flow, '<flow><http:request url="${secure::sample.endpoint}"/></flow>');
+    await stripSecure({ cwd: root, dryRun: true });
+    expect(existsSync(join(root, STRIP_STATE_PATH))).toBe(false);
+    expect((await stripSecure({ cwd: root })).data?.replacementCount).toBe(1);
+    expect(JSON.parse(readFileSync(join(root, STRIP_STATE_PATH), 'utf8'))).toEqual({
+      schemaVersion: 1,
+      files: [{ file: 'src/main/mule/sample.xml', keys: ['sample.endpoint'] }],
+    });
+
+    const result = await packageProject({ cwd: root });
+    expect(result.data).toMatchObject({ stripped: true, productionDeployable: false });
+    expect(readBuildInfo(readFileSync(result.data!.jarPath))).toMatchObject({
+      stripped: true,
+      productionDeployable: false,
+    });
+    expect(result.data?.findings?.map((finding) => finding.code)).toContain('MB-SEC-008');
+
+    // Restoring the prefix makes the sources deployable again, even with a stale record.
+    writeFileSync(flow, '<flow><http:request url="${secure::sample.endpoint}"/></flow>');
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(true);
+  });
+
+  it('marks a build non-deployable when an encrypted value is referenced without secure::', async () => {
+    mkdirSync(join(root, 'src/main/resources'), { recursive: true });
+    writeFileSync(
+      join(root, 'src/main/resources/secure.yaml'),
+      'sample:\n  token: "![c2FtcGxl]"\n'
+    );
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><set-variable value="${sample.token}"/></flow>'
+    );
+    const result = await packageProject({ cwd: root });
+    expect(result.data).toMatchObject({ stripped: true, productionDeployable: false });
+    const finding = result.data?.findings?.find((item) => item.code === 'MB-SEC-008');
+    expect(finding).toMatchObject({ file: 'src/main/mule/sample.xml', line: 1 });
+    expect(JSON.stringify(finding)).not.toContain('c2FtcGxl');
+  });
+
+  it('records and detects stripped DataWeave references inside CDATA', async () => {
+    const flow = join(root, 'src/main/mule/sample.xml');
+    writeFileSync(
+      flow,
+      '<flow><ee:set-payload><![CDATA[Mule::p("secure::sample.endpoint")]]></ee:set-payload></flow>'
+    );
+    expect((await stripSecure({ cwd: root })).data?.replacementCount).toBe(1);
+    expect(readFileSync(flow, 'utf8')).toContain('Mule::p("sample.endpoint")');
+    expect(JSON.parse(readFileSync(join(root, STRIP_STATE_PATH), 'utf8')).files).toEqual([
+      { file: 'src/main/mule/sample.xml', keys: ['sample.endpoint'] },
+    ]);
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(false);
+  });
+
+  it('detects an encrypted value referenced without secure:: inside CDATA', async () => {
+    mkdirSync(join(root, 'src/main/resources'), { recursive: true });
+    writeFileSync(
+      join(root, 'src/main/resources/secure.yaml'),
+      'sample:\n  token: "![c2FtcGxl]"\n'
+    );
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><ee:set-payload><![CDATA[Mule::p("sample.token")]]></ee:set-payload></flow>'
+    );
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(false);
+  });
+
+  it('ignores stripped-looking references inside XML comments', async () => {
+    mkdirSync(join(root, 'src/main/resources'), { recursive: true });
+    writeFileSync(
+      join(root, 'src/main/resources/secure.yaml'),
+      'sample:\n  token: "![c2FtcGxl]"\n'
+    );
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><!-- ${sample.token} --><set-variable value="${secure::sample.token}"/></flow>'
+    );
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(true);
+  });
+
+  it('records a partial strip when a later file cannot be written', async () => {
+    const first = join(root, 'src/main/mule/a.xml');
+    const second = join(root, 'src/main/mule/b.xml');
+    writeFileSync(first, '<flow><set-variable value="${secure::sample.first}"/></flow>');
+    writeFileSync(second, '<flow><set-variable value="${secure::sample.second}"/></flow>');
+    chmodSync(second, 0o444);
+    try {
+      const result = await stripSecure({ cwd: root });
+      expect(result.success).toBe(false);
+    } finally {
+      chmodSync(second, 0o644);
+    }
+    expect(readFileSync(first, 'utf8')).toContain('${sample.first}');
+    const package_ = await packageProject({ cwd: root });
+    expect(package_.data?.productionDeployable).toBe(false);
+    expect(package_.data?.findings?.find((finding) => finding.code === 'MB-SEC-008')).toMatchObject(
+      { file: 'src/main/mule/a.xml' }
+    );
+  });
+
+  it('refuses a production build of sources stripped in place', async () => {
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><http:request url="${secure::sample.endpoint}"/></flow>'
+    );
+    await stripSecure({ cwd: root });
+    const result = await packageProject({
+      cwd: root,
+      profile: 'production',
+      enforceGitClean: false,
+    });
+    expect(result.error?.message).toContain('stripped in place');
+    expect(mavenBuild).not.toHaveBeenCalled();
+  });
+
+  it('fails when project resources ship their own build-info marker', async () => {
+    vi.mocked(mavenBuild).mockImplementation(async ({ cwd }) => {
+      mkdirSync(join(cwd!, 'target'), { recursive: true });
+      writeFileSync(
+        join(cwd!, 'target/sample-mule-application.jar'),
+        zipSync({
+          'META-INF/maven/dev.sample/sample/pom.properties': strToU8(
+            'groupId=dev.sample\nartifactId=sample\nversion=1.2.3\n'
+          ),
+          [BUILD_INFO_PATH]: strToU8('{"stripped":false,"productionDeployable":true}'),
+        })
+      );
+      return ok({ metrics: { durationMs: 1 } });
+    });
+    const result = await packageProject({ cwd: root, stripSecure: true });
+    expect(result.error?.message).toContain('reserved for mule-build');
   });
 
   it('returns actual identity even when the output filename is a display label', async () => {

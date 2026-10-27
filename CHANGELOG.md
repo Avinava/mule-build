@@ -1,9 +1,67 @@
 # Changelog
 
-## Unreleased
+## 3.2.0 - 2026-10-27
+
+### Added
+
+- Every packaged JAR contains `META-INF/mule-build/build-info.json`:
+  `{"schemaVersion":1,"tool":"mule-build","toolVersion":"<x.y.z>","stripped":<bool>,"productionDeployable":<bool>}`,
+  with `productionDeployable` always `!stripped`. A `--strip-secure` build is marked
+  `stripped: true, productionDeployable: false`, so a deployer can refuse it from the JAR alone. The
+  entry is appended without rewriting existing entries and is also written to the Maven output in
+  `target/`. A project that ships its own file at that path fails the build.
+- `PackageResult`, `RunResult`, and MCP `run_build` and `run_app` return `stripped`,
+  `productionDeployable`, and `buildInfo`; `deployment-info.txt` records both flags. `readBuildInfo`
+  and `BUILD_INFO_PATH` are exported.
+- The `release-checklist` MCP prompt accepts `bump: "prerelease"` with `preid`, or an explicit
+  `version`, instead of a required `major`/`minor`/`patch` bump.
+- `release --bump prerelease --preid <id>` and MCP `bump: "prerelease"` with `preid`: `1.4.2` becomes
+  `1.4.2-hotfix.1`, then `1.4.2-hotfix.2`.
+- `release --version <version>` and MCP `version` release an explicit strict semantic version.
+  Four-part versions such as `1.4.2.1`, a `v` prefix, and `+build` metadata are rejected with a clear
+  error. `bump` is optional when `version` is given.
+- `compat` and `check_compatibility` read the `munit-runner` and `munit-tools` dependency versions as
+  well as the `munit-maven-plugin`, resolving `${...}` properties, and return them as `munit`. New
+  `MB-TC-007` warns when they differ. The Java 17 MUnit minimum (`MB-TC-002`) is checked against the
+  lowest of the three.
+- `test` and `run_tests` report the JDK Maven ran on as `jdk` (`javaVersion`, `javaVendor`,
+  `javaHome`, `javaHomeSource`, `mavenVersion`). `javaHomeSource` is `JAVA_HOME`, `PATH`, or
+  `override`; the JAVA_HOME value itself is never returned. `system_check` results include
+  `mavenToolchain`.
+
+- A normal `package` of sources stripped in place marks the JAR `stripped: true,
+  productionDeployable: false` and reports `MB-SEC-008`. The evidence is either a reference without
+  `secure::` to a key whose value is encrypted (`![...]`) in `src/main/resources`, or a key recorded in
+  `.mule-build/strip-state.json`, which `mule-build strip` now writes, that is still unprefixed.
+  References inside CDATA (inline DataWeave) count; XML comments do not. The record is written before
+  any file changes, so a strip that fails partway is tracked. Enforcing profiles refuse such sources.
+- Release previews list push blockers (detached `HEAD`, no `origin`) in `warnings`.
+
+### Changed
+
+- `release` is a transaction. Before any change it refuses an existing `v<version>` tag (even with
+  `--no-tag`), a version not newer in Maven order than every version tag reachable from `HEAD`, and a
+  push from detached `HEAD` or without `origin`. The branch and tag are pushed with one
+  `git push --atomic --no-follow-tags`, so `push.followTags` cannot push unrelated tags. A failed build, commit, tag, or push rolls back the tag, the release commit, and
+  `pom.xml`.
+- Bumping from a post-release prerelease starts from its release: `1.4.2-hotfix.1` with
+  `--bump patch` gives `1.4.3`, not `1.4.2`. A pre-release such as `1.5.0-rc.1` is still promoted to
+  `1.5.0`. The new version must be newer than the current one.
+- Prerelease counters are incremented exactly with BigInt.
+- MUnit and mule-maven-plugin versions are compared in Maven order (a port of Maven's
+  ComparableVersion, checked against Maven's own test cases), so `3.1.0-rc.1`, `3.1.0-0.rc.1`, and
+  `3.1.0-SNAPSHOT` no longer pass the Java 17 MUnit minimum.
+- Plugin versions are read from `<build><plugins>`, falling back to `<pluginManagement>` only for a
+  declared plugin without a version. Dependency versions omitted in `<dependencies>` are filled from the
+  POM's `<dependencyManagement>`.
+- The `release-checklist` prompt validates `version` and `preid` before building the prompt text.
+- Global CLI options (`-C`, `-v`, `--version`) must come before the command. This fixes
+  `package --version <version>`, which printed the tool version and exited without building.
+  `mule-build package -v` is now an unknown option; write `mule-build -v package`.
 
 ### Fixed
 
+- `readBuildInfo` returns `undefined` for bytes that are not a ZIP archive instead of throwing.
 - The `mule-build` bin path is normalized, so npm 11 publishes it instead of silently removing it.
   `scripts/check-release.mjs` now rejects `./`-prefixed bin paths.
 

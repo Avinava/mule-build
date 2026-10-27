@@ -10,6 +10,7 @@ import {
 } from '../types/index.js';
 import { evaluateProjectCompatibility } from '../api/compat.js';
 import { isMavenInstalled } from '../engine/MavenBuilder.js';
+import type { MavenToolchain } from '../engine/Toolchain.js';
 import { pomExists } from '../engine/PomParser.js';
 import { resolveRuntime } from '../engine/RuntimeResolver.js';
 import { loadConfig } from './ConfigLoader.js';
@@ -38,6 +39,8 @@ export interface SystemCheckResult {
   munitPlugin: boolean;
   muleSourceDir: boolean;
   resolvedRuntime?: ResolvedRuntime;
+  /** JDK and Maven reported by `mvn -v` in the project, when toolchain checks ran. */
+  mavenToolchain?: MavenToolchain;
   details: SystemCheckDetail[];
 }
 
@@ -60,17 +63,19 @@ async function compatibilityDetails(
   cwd: string,
   operation: SystemCheckOperation,
   mavenInstalled: boolean
-): Promise<SystemCheckDetail[]> {
+): Promise<{ details: SystemCheckDetail[]; mavenToolchain?: MavenToolchain }> {
   const report = await evaluateProjectCompatibility(cwd, { toolchain: mavenInstalled });
   if (!report.success || !report.data) {
-    return [
-      {
-        component: 'compatibility',
-        required: false,
-        passed: false,
-        message: `Compatibility could not be checked: ${report.error?.message}`,
-      },
-    ];
+    return {
+      details: [
+        {
+          component: 'compatibility',
+          required: false,
+          passed: false,
+          message: `Compatibility could not be checked: ${report.error?.message}`,
+        },
+      ],
+    };
   }
   const blocking: Record<FindingCategory, SystemCheckOperation[]> = {
     toolchain: ['test', 'run'],
@@ -96,7 +101,7 @@ async function compatibilityDetails(
       message: `Connectors, descriptor, and toolchain agree with Mule ${muleVersion ?? 'unknown'} / Java ${javaVersion ?? 'unknown'}`,
     });
   }
-  return details;
+  return { details, mavenToolchain: report.data.toolchain?.maven };
 }
 
 export interface SystemCheckOptions {
@@ -180,8 +185,11 @@ export async function runSystemChecks(
     },
   ];
 
+  let mavenToolchain: MavenToolchain | undefined;
   if (pomXml && (options.compatibility ?? true)) {
-    details.push(...(await compatibilityDetails(cwd, operation, maven)));
+    const compatibility = await compatibilityDetails(cwd, operation, maven);
+    details.push(...compatibility.details);
+    mavenToolchain = compatibility.mavenToolchain;
   }
 
   if (releaseRequired) {
@@ -218,6 +226,7 @@ export async function runSystemChecks(
     munitPlugin,
     muleSourceDir,
     resolvedRuntime: runtimeResult.data,
+    ...(mavenToolchain ? { mavenToolchain } : {}),
     details,
   });
 }
@@ -235,7 +244,10 @@ export async function canBuild(cwd: string = process.cwd()): Promise<Result<void
   return ok(undefined);
 }
 
-export async function canTest(cwd: string = process.cwd()): Promise<Result<void>> {
+/** Check test readiness; on success, returns the JDK Maven will run on when it was detected. */
+export async function canTest(
+  cwd: string = process.cwd()
+): Promise<Result<MavenToolchain | undefined>> {
   const checks = await runSystemChecks(cwd, 'test');
   if (!checks.success || !checks.data?.ready) {
     const failures = checks.data?.details
@@ -244,7 +256,7 @@ export async function canTest(cwd: string = process.cwd()): Promise<Result<void>
       .join('; ');
     return err(checks.error ?? new Error(failures || 'Test requirements not met'));
   }
-  return ok(undefined);
+  return ok(checks.data.mavenToolchain);
 }
 
 export async function canRun(cwd: string = process.cwd()): Promise<Result<void>> {

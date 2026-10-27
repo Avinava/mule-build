@@ -11,6 +11,9 @@ Run commands from a Mule project root, or point at one with `-C`.
 | `--version` | Print the `mule-build` version |
 | `--help` | Print help for the CLI or any command |
 
+Global options go before the command: `mule-build -C ../orders-api -v package`. After the command,
+`--version` belongs to `package` and `release`.
+
 ## `doctor`
 
 Diagnose whether the project and machine can perform an operation. Read-only.
@@ -46,6 +49,11 @@ mule-build test --suite orders-suite --test creates-order
 mule-build test --tags smoke,contract
 ```
 
+The summary names the JDK Maven ran on, from `mvn -v` in the project directory, and where it came
+from: `JAVA_HOME` (the variable selected it), `PATH` (`JAVA_HOME` is unset), or `override` (something
+such as `~/.mavenrc` or a wrapper replaced `JAVA_HOME`). The API and MCP result carry the same facts in
+`jdk`. Only `mvn -v` facts are reported; no environment values are printed.
+
 ## `package`
 
 Build the application. Safe by default: `mvn clean package` with no source rewriting.
@@ -75,6 +83,61 @@ the target runtime and Java (see [`compat`](#compat)). The profile's `compatibil
 an error does: `enforce` fails the build (the built-in `production` default), `warn` reports it (the
 default for other builds), and `off` skips the check. Warnings appear in the build summary and in
 `deployment-info.txt`.
+
+### Build-info marker
+
+Every JAR that `package` (and `run`) builds contains `META-INF/mule-build/build-info.json`, so a
+deployer can tell from the JAR alone whether it may go to production:
+
+```json
+{
+  "schemaVersion": 1,
+  "tool": "mule-build",
+  "toolVersion": "3.2.0",
+  "stripped": true,
+  "productionDeployable": false
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `schemaVersion` | number | Always `1` for this layout |
+| `tool` | string | Always `mule-build` |
+| `toolVersion` | string | The `mule-build` version that packaged the JAR |
+| `stripped` | boolean | `true` when built with `--strip-secure`, or when the sources were [stripped in place](#sources-stripped-in-place) |
+| `productionDeployable` | boolean | Always `!stripped`. `false` means the JAR must not be deployed to production |
+
+The file is written for stripped and non-stripped builds alike, and carries no values from the build
+machine or environment. It is appended to the Maven-built JAR without rewriting existing entries, and
+both the returned JAR and the Maven output in `target/` carry it. The build fails if project resources
+already contain that path, so a project cannot supply its own marker. A deployer should treat a JAR
+without the file as built outside `mule-build`, and refuse one with `productionDeployable: false` for a
+production target. The package result also returns `stripped`, `productionDeployable`, and `buildInfo`,
+and `deployment-info.txt` records both flags.
+
+### Sources stripped in place
+
+A normal `package` also marks the JAR `stripped: true, productionDeployable: false` when the sources
+themselves lost their `secure::` prefixes, for example after `mule-build strip`. Either signal is enough:
+
+- **An encrypted value referenced without `secure::`.** A key whose value is `![...]` in a YAML or
+  `.properties` file under `src/main/resources` only resolves through `secure::`, so `${key}` or
+  `p('key')` in `src/main/mule` (XML or DataWeave) means the prefix was removed.
+- **The strip record.** `mule-build strip` (without `--dry-run`) writes
+  `.mule-build/strip-state.json` with the keys it unprefixed in each file:
+  `{"schemaVersion":1,"files":[{"file":"src/main/mule/orders.xml","keys":["db.password"]}]}`.
+  While a recorded file still references a recorded key without `secure::`, the sources count as
+  stripped. This catches keys whose encrypted values are not in the project. An unreadable record also
+  counts as stripped. The record is written before any file changes, so a strip that fails partway
+  is still tracked.
+
+Both signals read references inside CDATA, where Mule keeps inline DataWeave such as
+`<![CDATA[Mule::p("secure::db.password")]]>`, and ignore XML comments.
+
+Each piece of evidence is a `MB-SEC-008` warning naming the file, line, and key (never a value). A
+profile with `secureProperties: enforce`, such as `production`, refuses to build stripped sources.
+Restoring the `secure::` references makes the sources deployable again even if the record remains;
+delete `.mule-build/strip-state.json` once you have restored them.
 
 ## `run`
 
@@ -197,6 +260,21 @@ connector without the annotation is assumed to support Java 8 and 11, as Mule as
 | `MB-TC-004` | info | No JDK pin was found |
 | `MB-TC-005` | error | A connector does not support Maven's JDK, so MUnit cannot deploy it |
 | `MB-TC-006` | error or warning | The mule-maven-plugin version predates Java 17 support, or ignores `javaSpecificationVersions` |
+| `MB-TC-007` | warning | `munit-maven-plugin`, `munit-runner`, and `munit-tools` are declared with different versions |
+
+`compat` reads three MUnit versions from `pom.xml`, resolving `${...}` project properties: the
+`munit-maven-plugin` (or the `munit.version` property), and the `munit-runner` and `munit-tools`
+dependencies. They appear in the result as `munit.plugin`, `munit.runner`, and `munit.tools`. The Java 17
+check (`MB-TC-002`, MUnit 3.1.0 or later) uses the lowest of them, and the Mule 4.3.0 minimum for MUnit
+3 uses the highest. MUnit and mule-maven-plugin versions are compared in Maven order, so
+`3.1.0-rc.1` and `3.1.0-SNAPSHOT` count as older than `3.1.0`. Versions that stay unresolved (for
+example, set in a parent POM) are skipped.
+
+Plugin versions come from the plugin declared under `<build><plugins>`. A declared plugin without a
+version takes the one in `<build><pluginManagement>`, and a plugin that appears only in
+`<pluginManagement>` is not part of the build, so it is ignored. In the same way, a dependency without
+a version takes it from the POM's own `<dependencyManagement>`. Versions from a parent POM or an
+imported BOM are not read.
 
 ```bash
 mule-build compat
@@ -221,6 +299,10 @@ mule-build strip --dry-run
 During a build, stripping happens in an isolated staged copy instead, so `package --strip-secure`
 never touches your checkout.
 
+A real `strip` records what it removed in `.mule-build/strip-state.json`, so a later `package` of the
+stripped sources is [marked not production deployable](#sources-stripped-in-place). `--dry-run` writes
+nothing.
+
 ## `release`
 
 Bump the version, build the application, commit, tag, and push as one transaction. The direct CLI
@@ -228,7 +310,9 @@ mutates by default for backward compatibility, so run the `--dry-run` form first
 
 | Option | Effect |
 | --- | --- |
-| `-b, --bump <type>` | Required. `major`, `minor`, or `patch` |
+| `-b, --bump <type>` | `major`, `minor`, `patch`, or `prerelease`. Required unless `--version` is given |
+| `--preid <identifier>` | Prerelease identifier for `--bump prerelease`, such as `hotfix` |
+| `--version <version>` | Release this exact strict semantic version instead of bumping |
 | `--no-tag` | Skip tag creation |
 | `--no-push` | Skip pushing |
 | `--dry-run` | Print the resulting version and tag without changing anything |
@@ -236,12 +320,40 @@ mutates by default for backward compatibility, so run the `--dry-run` form first
 ```bash
 mule-build release --bump patch --dry-run
 mule-build release --bump patch
+mule-build release --bump prerelease --preid hotfix --dry-run   # 1.4.2 -> 1.4.2-hotfix.1
+mule-build release --version 1.5.0-rc.1 --dry-run
 ```
 
-The preview prints the old and new versions, planned tag, and push intent, then confirms that no files
-or Git state changed. The real release targets the current branch and newly created tag only; it does
-not push unrelated tags. `doctor --operation release` checks that the project is in a Git repository
-with a clean working tree before you begin.
+A prerelease bump stays on the current release: `1.4.2` becomes `1.4.2-hotfix.1`, then
+`1.4.2-hotfix.2`. Without `--preid` it continues the current identifier. Switching identifiers (for
+example from `1.4.2-rc.1` to `hotfix`) is refused; use `--version`. An explicit version must be strict
+`major.minor.patch` with an optional `-prerelease`: no `v` prefix, no leading zeros, and no `+build`
+metadata. Four-part versions such as `1.4.2.1` are rejected because the Mule Maven plugin rejects them.
+
+Bumps from a prerelease follow Maven version order:
+
+| Current | Kind | `--bump patch` | `--bump minor` |
+| --- | --- | --- | --- |
+| `1.4.2-hotfix.1` | Post-release: Maven orders an unknown qualifier (or `sp`) after `1.4.2`, which was already released | `1.4.3` | `1.5.0` |
+| `1.5.0-rc.1` | Pre-release: `alpha`, `beta`, `milestone`, `rc`, and `SNAPSHOT` precede `1.5.0` | `1.5.0` | `1.5.0` |
+
+Every new version must be newer than the current one in Maven order.
+
+Before changing anything, the release refuses when:
+
+- tag `v<new version>` already exists anywhere, even with `--no-tag`, since that version was released;
+- the new version is not newer, in Maven order, than every `v<version>` tag reachable from `HEAD`. Tags
+  on other branches, such as a newer release line, do not block a maintenance release;
+- pushing is planned but `HEAD` is detached or no `origin` remote exists.
+
+The preview runs the same version and tag checks and fails the same way. It lists push blockers as
+warnings. The real release then edits `pom.xml`, builds, commits, tags, and pushes the branch and tag in
+one atomic `git push --atomic --no-follow-tags`, so the remote takes both or neither, and
+`push.followTags` cannot add other tags. If any step fails, the release
+rolls back: the new tag is deleted, the release commit is undone with `git reset --soft`, and `pom.xml`
+is restored byte for byte. Nothing reached the remote, so no shared history is rewritten.
+`doctor --operation release` checks that the project is in a Git repository with a clean working tree
+before you begin.
 
 ## `mcp`
 
@@ -265,6 +377,8 @@ verified Maven coordinates and SHA-256 in its build summary. The filename is a d
 an Exchange asset identity. Pass the verified artifact ID, version, and digest explicitly to the
 publication preview. Exchange group IDs may differ from the Maven group; review that mapping.
 Missing or ambiguous Maven metadata and a packaged version mismatch fail the build result.
+The `sha256` covers the final bytes, including the [build-info marker](#build-info-marker). Check
+`productionDeployable` before any production handoff.
 
 The security gate is deliberately narrow: it fails only on secrets that are clearly present. It
 does not prove that all credentials are secure and does not replace the broader `mule-lint` security

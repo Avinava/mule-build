@@ -13,6 +13,8 @@ a remediation line, which resolves most of what follows without reading further.
 | `src/main/mule not found` | Non-standard layout. Restore the standard directory rather than pointing the tool elsewhere |
 | A Java error from Maven | Run `mule-build compat`. It reports the JDK Maven actually uses (`mvn -v`) against `app.runtime`, MUnit, and the connectors (`MB-TC-001`, `MB-TC-002`, `MB-TC-005`) |
 | `MB-TC-003` pin disagrees with Maven | The shell or CI step is not using the pinned JDK. Activate the version manager there, or set `JAVA_HOME` to the pinned JDK |
+| `MB-TC-007` MUnit versions differ | `munit-maven-plugin`, `munit-runner`, and `munit-tools` are set separately. Drive all three from one `munit.version` property |
+| `test` reports `javaHomeSource: override` | `JAVA_HOME` is set, but Maven ran another JDK, usually from `~/.mavenrc` or a wrapper. Fix that file or unset `JAVA_HOME` so the two agree |
 
 ## Runtime
 
@@ -29,6 +31,8 @@ a remediation line, which resolves most of what follows without reading further.
 | Symptom | Cause and fix |
 | --- | --- |
 | `--strip-secure` refused | The selected profile sets `secureProperties: enforce`. The two intentions conflict; pick one |
+| `build-info.json is reserved for mule-build` | The project ships `META-INF/mule-build/build-info.json` (usually under `src/main/resources`). Remove it; `mule-build` writes that file itself |
+| A deployer refuses the JAR as not production deployable | It was built with `--strip-secure`. Build again without it, using encrypted secure properties or platform secure properties |
 | `enforce` exits non-zero | That is the gate working. Each finding names the code, file, and line; the codes are in the [CLI reference](cli.md#enforce) |
 | `MB-SEC-002` on a connector config | A credential is written as a literal. Use `${secure::key}` with an encrypted file, or a platform secure property (`${key}` listed in `mule-artifact.json` `secureProperties`) |
 | `MB-SEC-003` in `src/main/resources` | A plaintext secret would be packaged into the JAR. Encrypt it as `![...]`, or supply it at deployment |
@@ -47,7 +51,13 @@ a remediation line, which resolves most of what follows without reading further.
 | Symptom | Cause and fix |
 | --- | --- |
 | Release refuses to run | The profile sets `enforceGitClean` and the tree is dirty. Commit or stash first |
-| The tag was not pushed | `--no-push` was passed, or push failed. The release targets the current branch and the new tag only, never all local tags |
+| The tag was not pushed | `--no-push` was passed. A failed push rolls the whole release back, because the branch and tag go out in one atomic push. The release targets the current branch and the new tag only, never all local tags |
+| `Tag v... already exists` | That version was already released. Choose a later version; the release refuses this even with `--no-tag` |
+| `is not newer than v...` | A newer version tag is reachable from `HEAD`. Bump past it, or release a maintenance version from a branch that does not contain the newer tag |
+| `The release was rolled back` | A build, commit, tag, or push step failed. The tag, release commit, and `pom.xml` change were undone; fix the cause and run the release again |
+| `MB-SEC-008` or `stripped in place` on `package` | The sources lost their `secure::` prefixes, usually through `mule-build strip`. Restore them (for example `git restore src/main/mule`), then delete `.mule-build/strip-state.json` |
+| `has four numeric parts` | Versions such as `1.4.2.1` are rejected because the Mule Maven plugin rejects them. Use a prerelease qualifier: `release --bump prerelease --preid hotfix` gives `1.4.2-hotfix.1` |
+| `unknown option '-v'` or `unknown option '-C'` | Put `-C`, `-v`, and the tool `--version` before the command: `mule-build -C app -v package` |
 | An agent released without asking | It should not: `release_version` previews unless called with `confirm: true`. Report it if you see otherwise |
 
 ## MCP

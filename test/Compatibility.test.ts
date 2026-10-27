@@ -10,6 +10,7 @@ import {
 } from '../src/compat/evaluate.js';
 import { runtimeJavaSupport } from '../src/compat/platform.js';
 import { javaFeatureVersion, parseMavenVersionOutput } from '../src/engine/Toolchain.js';
+import { munitVersions } from '../src/api/compat.js';
 import { locateLocalRepository, pluginJarPath } from '../src/engine/MavenRepository.js';
 import { getDependencies, getPluginVersion, getPomProperties } from '../src/engine/PomParser.js';
 import { PluginFacts } from '../src/engine/MulePluginInspector.js';
@@ -243,6 +244,60 @@ describe('evaluateCompatibility', () => {
       })
     ).toEqual(['MB-TC-002:error']);
   });
+
+  it('reports differing MUnit components and checks Java 17 against the lowest', () => {
+    const facts: Partial<CompatibilityFacts> = {
+      munit: { plugin: '3.1.0', runner: '3.0.0', tools: '3.1.0' },
+      toolchain: {
+        maven: { javaVersion: '17' },
+        pins: [{ file: '.java-version', value: '17', javaVersion: '17' }],
+      },
+    };
+    expect(evaluate(facts)).toEqual(['MB-TC-007:warning', 'MB-TC-002:error']);
+    const findings = evaluateCompatibility({
+      target: {
+        muleVersion: '4.6.6',
+        muleVersionSource: 'config',
+        javaVersion: '17',
+        javaVersionSource: 'config',
+      },
+      descriptor: { minMuleVersion: '4.6.0', javaSpecificationVersions: ['17'] },
+      connectors: [],
+      ...facts,
+    });
+    const java17 = findings.find((finding) => finding.code === 'MB-TC-002');
+    expect(java17?.message).toContain('MUnit 3.0.0 (munit-runner)');
+    expect(java17?.remediation).toBe('Set munit-runner to 3.1.0 or later.');
+    expect(findings.find((finding) => finding.code === 'MB-TC-007')?.evidence).toEqual({
+      'munit-maven-plugin': '3.1.0',
+      'munit-runner': '3.0.0',
+      'munit-tools': '3.1.0',
+    });
+  });
+
+  it('treats MUnit pre-releases as older than the release they precede', () => {
+    const toolchain = {
+      maven: { javaVersion: '17' },
+      pins: [{ file: '.java-version', value: '17', javaVersion: '17' }],
+    };
+    for (const version of ['3.1.0-rc.1', '3.1.0-SNAPSHOT']) {
+      expect(evaluate({ munit: { plugin: version }, toolchain })).toEqual(['MB-TC-002:error']);
+    }
+    expect(evaluate({ munit: { plugin: '3.1.0-hotfix.1' }, toolchain })).toEqual([]);
+  });
+
+  it('accepts matching MUnit components and ignores unresolved ones', () => {
+    const toolchain = {
+      maven: { javaVersion: '17' },
+      pins: [{ file: '.java-version', value: '17', javaVersion: '17' }],
+    };
+    expect(
+      evaluate({ munit: { plugin: '3.1.0', runner: '3.1.0', tools: '3.1.0' }, toolchain })
+    ).toEqual([]);
+    expect(
+      evaluate({ munit: { plugin: '3.1.0', runner: '${parent.munit}', tools: '3.1.0' }, toolchain })
+    ).toEqual([]);
+  });
 });
 
 describe('resolveTarget', () => {
@@ -350,5 +405,65 @@ describe('toolchain and repository facts', () => {
     ]);
     expect(getPluginVersion(pom, 'munit-maven-plugin')).toBe('3.1.0');
     expect(getPluginVersion(pom, 'mule-maven-plugin')).toBeUndefined();
+  });
+
+  it('reads the declared build plugin, not pluginManagement, and fills managed versions', () => {
+    const pom = `<project>
+      <properties><munit.version>3.1.0</munit.version></properties>
+      <dependencyManagement><dependencies>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-runner</artifactId><version>3.0.0</version><classifier>mule-plugin</classifier></dependency>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-tools</artifactId><version>\${munit.version}</version><classifier>mule-plugin</classifier></dependency>
+        <dependency><groupId>dev.sample</groupId><artifactId>sample-connector</artifactId><version>2.0.0</version><classifier>mule-plugin</classifier></dependency>
+      </dependencies></dependencyManagement>
+      <dependencies>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-runner</artifactId><classifier>mule-plugin</classifier><scope>test</scope></dependency>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-tools</artifactId><classifier>mule-plugin</classifier><scope>test</scope></dependency>
+        <dependency><groupId>dev.sample</groupId><artifactId>sample-connector</artifactId><classifier>mule-plugin</classifier></dependency>
+      </dependencies>
+      <build>
+        <pluginManagement><plugins>
+          <plugin><artifactId>munit-maven-plugin</artifactId><version>2.3.0</version></plugin>
+          <plugin><artifactId>mule-maven-plugin</artifactId><version>4.3.0</version></plugin>
+        </plugins></pluginManagement>
+        <plugins>
+          <plugin><artifactId>munit-maven-plugin</artifactId><version>\${munit.version}</version></plugin>
+          <plugin><artifactId>mule-maven-plugin</artifactId></plugin>
+        </plugins>
+      </build>
+    </project>`;
+    expect(getPluginVersion(pom, 'munit-maven-plugin')).toBe('3.1.0');
+    expect(getPluginVersion(pom, 'mule-maven-plugin')).toBe('4.3.0');
+    expect(munitVersions(pom)).toEqual({ plugin: '3.1.0', runner: '3.0.0', tools: '3.1.0' });
+    expect(
+      getDependencies(pom).find((dependency) => dependency.artifactId === 'sample-connector')
+        ?.version
+    ).toBe('2.0.0');
+    expect(
+      getPluginVersion(
+        '<project><build><pluginManagement><plugins><plugin><artifactId>munit-maven-plugin</artifactId><version>3.1.0</version></plugin></plugins></pluginManagement></build></project>',
+        'munit-maven-plugin'
+      )
+    ).toBeUndefined();
+  });
+
+  it('reads the MUnit plugin, runner, and tools versions with properties resolved', () => {
+    const pom = `<project>
+      <properties><munit.version>3.1.0</munit.version><runner.version>3.0.0</runner.version></properties>
+      <dependencies>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-runner</artifactId>
+          <version>\${runner.version}</version><classifier>mule-plugin</classifier><scope>test</scope></dependency>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-tools</artifactId>
+          <version>\${munit.version}</version><classifier>mule-plugin</classifier><scope>test</scope></dependency>
+      </dependencies>
+      <build><plugins>
+        <plugin><groupId>com.mulesoft.munit.tools</groupId><artifactId>munit-maven-plugin</artifactId><version>\${munit.version}</version></plugin>
+      </plugins></build>
+    </project>`;
+    expect(munitVersions(pom)).toEqual({ plugin: '3.1.0', runner: '3.0.0', tools: '3.1.0' });
+    expect(
+      munitVersions(
+        '<project><properties><munit.version>3.2.0</munit.version></properties></project>'
+      )
+    ).toEqual({ plugin: '3.2.0' });
   });
 });

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="mule-build" width="560" />
+  <img src="docs/assets/logo.svg" alt="Mule Build: validate, test, package and release Mule 4 apps" width="640" />
 </p>
 
 <p align="center">
@@ -8,7 +8,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
 </p>
 
-<p align="center"><strong>A familiar build path for MuleSoft projects: check, test, package.</strong></p>
+<p align="center"><strong>A familiar build path for MuleSoft projects: check, test, package, release.</strong></p>
 
 `mule-build` wraps the Maven and Mule operations you already use. Node.js is only the small runtime
 that starts the command; you do not need to write JavaScript or understand a Node project.
@@ -18,7 +18,7 @@ that starts the command; you do not need to write JavaScript or understand a Nod
 You need Node.js 20.19 or newer, Maven, and a JDK supported by your Mule runtime.
 
 ```bash
-npm install --global @sfdxy/mule-build@3.1.0
+npm install --global @sfdxy/mule-build@3.2.0
 cd my-mule-application
 mule-build doctor --operation test
 mule-build test
@@ -53,13 +53,13 @@ The JAR stays in `target/`. `mule-build` does not publish to Exchange or deploy 
 | Command | What it means |
 | --- | --- |
 | `doctor` | Check Maven, POM, Mule/MUnit plugins, source layout, runtime, or Git readiness |
-| `test` | Run all MUnit tests or select a suite, test, or tags |
-| `package` | Run the Mule Maven package lifecycle and copy the final JAR to `target/` |
+| `test` | Run all MUnit tests or select a suite, test, or tags, and report the JDK Maven ran on |
+| `package` | Run the Mule Maven package lifecycle and copy the final JAR, with its build-info marker, to `target/` |
 | `enforce` | Find secrets that would ship in the JAR: unsecured references, literal credentials, plaintext config values |
 | `compat` | Check connectors, `mule-artifact.json`, Maven JDK, and MUnit against the target Mule runtime and Java |
 | `run` | Build and deploy to a compatible Mule runtime on your machine |
 | `status`, `stop` | Inspect or stop that resolved local runtime |
-| `release` | Change the POM version, build, commit, tag, and optionally push |
+| `release` | Change the POM version (a bump, a prerelease such as `1.4.2-hotfix.1`, or an explicit version), build, commit, tag, and optionally push |
 | `strip` | Directly remove `secure::` prefixes from source XML |
 | `mcp` | Let an MCP-capable coding agent call the same operations |
 
@@ -89,6 +89,7 @@ mule-build compat
 # Release preview: no POM, commit, tag, or remote changes
 mule-build doctor --operation release
 mule-build release --bump patch --dry-run
+mule-build release --bump prerelease --preid hotfix --dry-run   # 1.4.2 -> 1.4.2-hotfix.1
 ```
 
 ## Security and compatibility gates
@@ -100,8 +101,11 @@ mule-build release --bump patch --dry-run
   `secureProperties`). See [Secret models](docs/design.md#secret-models).
 - `compat` checks each connector's `minMuleVersion` and Java support, read from the connector JARs,
   against `mule-artifact.json`, `app.runtime`, and the declared `target`. It also checks the JDK
-  Maven and MUnit run on.
+  Maven and MUnit run on, and that the MUnit plugin, runner, and tools versions agree.
 - The `production` profile runs both gates around the build. Other builds report warnings.
+- Every packaged JAR carries `META-INF/mule-build/build-info.json` with `stripped` and
+  `productionDeployable`. A `--strip-secure` build is marked `productionDeployable: false`, so a
+  deployer can refuse it from the JAR alone. See [Build-info marker](docs/cli.md#build-info-marker).
 
 Every result is a finding with a stable code (`MB-SEC-*`, `MB-CMP-*`, `MB-TC-*`) and a fix. Findings
 never contain secret values. Codes are listed under [`enforce`](docs/cli.md#enforce) and
@@ -110,8 +114,8 @@ never contain secret values. Codes are listed under [`enforce`](docs/cli.md#enfo
 For CI and agent configuration, pin the command so every machine runs the same release:
 
 ```bash
-npx -y @sfdxy/mule-build@3.1.0 doctor --operation build
-npx -y @sfdxy/mule-build@3.1.0 package
+npx -y @sfdxy/mule-build@3.2.0 doctor --operation build
+npx -y @sfdxy/mule-build@3.2.0 package
 ```
 
 ## MCP and JavaScript API
@@ -120,7 +124,7 @@ The MCP server exposes eleven stable tools, including the read-only `check_compa
 packaged guidance:
 
 ```bash
-npx -y @sfdxy/mule-build@3.1.0 mcp
+npx -y @sfdxy/mule-build@3.2.0 mcp
 ```
 
 MCP `release_version` and `strip_secure` are preview-first. They require an explicit agent-side

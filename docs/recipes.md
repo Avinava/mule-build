@@ -89,7 +89,8 @@ mule-build package --strip-secure
 ```
 
 This builds an isolated temporary copy. It is safer than the direct `strip` command, which edits the
-source unless you add `--dry-run`.
+source unless you add `--dry-run`. The JAR is marked `productionDeployable: false` in
+`META-INF/mule-build/build-info.json`, so a deployer that reads the marker refuses it for production.
 
 ## CI build
 
@@ -97,15 +98,15 @@ Pin the version and keep the stages visible:
 
 ```yaml
 - name: Check Mule build prerequisites
-  run: npx -y @sfdxy/mule-build@3.1.0 doctor --operation test
+  run: npx -y @sfdxy/mule-build@3.2.0 doctor --operation test
 - name: Check for secrets in the artifact sources
-  run: npx -y @sfdxy/mule-build@3.1.0 enforce
+  run: npx -y @sfdxy/mule-build@3.2.0 enforce
 - name: Check connector and runtime compatibility
-  run: npx -y @sfdxy/mule-build@3.1.0 compat
+  run: npx -y @sfdxy/mule-build@3.2.0 compat
 - name: Run MUnit
-  run: npx -y @sfdxy/mule-build@3.1.0 test
+  run: npx -y @sfdxy/mule-build@3.2.0 test
 - name: Package
-  run: npx -y @sfdxy/mule-build@3.1.0 package --skip-tests
+  run: npx -y @sfdxy/mule-build@3.2.0 package --skip-tests
 ```
 
 The last step deliberately skips a second test run because the preceding step already ran MUnit.
@@ -133,6 +134,17 @@ mule-build release --bump patch
 
 The direct CLI command mutates by default. It changes the POM, builds, commits, tags, and pushes
 unless you use `--no-tag` or `--no-push`.
+
+## Release a hotfix of a shipped version
+
+Mule application versions must be three-part semantic versions, so `1.4.2.1` is rejected. Use a
+prerelease qualifier on the shipped version instead:
+
+```bash
+mule-build release --bump prerelease --preid hotfix --dry-run   # 1.4.2 -> 1.4.2-hotfix.1
+mule-build release --bump prerelease --dry-run                  # 1.4.2-hotfix.1 -> 1.4.2-hotfix.2
+mule-build release --version 1.4.3 --dry-run                    # an exact version
+```
 
 ## Run on a local Mule runtime
 

@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import { packageProject } from './api/package.js';
 import { testProject } from './api/test.js';
 import { runLocal } from './api/run.js';
-import { releaseVersion } from './api/release.js';
+import { BUMP_TYPES, releaseVersion } from './api/release.js';
 import { stripSecure } from './api/strip.js';
 import { SECURITY_RULES, enforceSecure, formatFinding } from './api/enforce.js';
 import { checkCompatibility } from './api/compat.js';
@@ -48,6 +48,9 @@ export function createProgram(): Command {
     .name(NAME)
     .description('MuleSoft build automation CLI')
     .version(PACKAGE_VERSION)
+    // Global options go before the command, so `package --version` and
+    // `release --version` reach the command instead of printing the tool version.
+    .enablePositionalOptions()
     .option('-v, --verbose', 'Enable verbose output')
     .option('-C, --cwd <path>', 'Mule project directory', process.cwd())
     .hook('preAction', (thisCommand) => {
@@ -111,6 +114,13 @@ export function createProgram(): Command {
       );
       console.log(chalk.green(`\n✓ ${headline}`));
       for (const detail of details) console.log(chalk.dim(detail));
+      if (result.data?.stripped) {
+        console.log(
+          chalk.yellow(
+            '! Secure properties were stripped: this JAR is marked productionDeployable=false and must not be deployed to production'
+          )
+        );
+      }
       for (const finding of result.data?.findings ?? []) {
         console.log(chalk.yellow(`! ${formatFinding(finding)}`));
       }
@@ -149,6 +159,14 @@ export function createProgram(): Command {
           `\n✓ Tests passed: ${metrics.testsRun} run, ${metrics.failures} failures, ${metrics.errors} errors, ${metrics.skipped} skipped`
         )
       );
+      const { jdk } = result.data;
+      if (jdk) {
+        console.log(
+          chalk.dim(
+            `  JDK: Java ${jdk.javaVersion ?? 'unknown'}${jdk.javaVendor ? ` (${jdk.javaVendor})` : ''}${jdk.javaHome ? ` at ${jdk.javaHome}` : ''}${jdk.javaHomeSource ? ` via ${jdk.javaHomeSource}` : ''}`
+          )
+        );
+      }
       if (result.data.reportPaths.length > 0) {
         console.log(chalk.dim(`  Reports: ${result.data.reportPaths.join(', ')}`));
       }
@@ -196,19 +214,27 @@ export function createProgram(): Command {
   program
     .command('release')
     .description('Bump version and create a release')
-    .requiredOption('-b, --bump <type>', 'Version bump type: major | minor | patch')
+    .option('-b, --bump <type>', 'Version bump type: major | minor | patch | prerelease')
+    .option('--preid <identifier>', 'Prerelease identifier for --bump prerelease, e.g. hotfix')
+    .option('--version <version>', 'Release this strict semantic version instead of bumping')
     .option('--no-tag', 'Skip git tag creation')
     .option('--no-push', 'Skip git push')
     .option('--dry-run', 'Preview the version and tag without changing files')
     .action(async (options) => {
-      const bump = options.bump as BumpType;
-      if (!['major', 'minor', 'patch'].includes(bump)) {
-        console.error(chalk.red(`Invalid bump type: ${bump}. Use 'major', 'minor', or 'patch'.`));
+      const bump = options.bump as BumpType | undefined;
+      if (bump === undefined && options.version === undefined) {
+        console.error(chalk.red('Pass --bump <type> or --version <version>.'));
+        process.exit(1);
+      }
+      if (bump !== undefined && !BUMP_TYPES.includes(bump)) {
+        console.error(chalk.red(`Invalid bump type: ${bump}. Use ${BUMP_TYPES.join(', ')}.`));
         process.exit(1);
       }
 
       const result = await releaseVersion({
         bump,
+        preid: options.preid,
+        version: options.version,
         tag: options.tag,
         push: options.push,
         dryRun: options.dryRun,
@@ -334,6 +360,12 @@ export function createProgram(): Command {
           `Maven JDK: ${report.toolchain.maven.javaVersion} ${report.toolchain.maven.javaVendor ?? ''}`.trimEnd()
         );
       }
+      const munit = [
+        report.munit.plugin && `plugin ${report.munit.plugin}`,
+        report.munit.runner && `runner ${report.munit.runner}`,
+        report.munit.tools && `tools ${report.munit.tools}`,
+      ].filter(Boolean);
+      if (munit.length > 0) console.log(`MUnit: ${munit.join(', ')}`);
       for (const connector of report.connectors) {
         const facts = connector.minMuleVersion
           ? `Mule >= ${connector.minMuleVersion}, Java ${connector.javaVersions?.join('/')}${connector.javaVersionsDeclared ? '' : ' (default)'}`

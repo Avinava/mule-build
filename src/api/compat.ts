@@ -29,6 +29,7 @@ import {
   CompatibilityFacts,
   CompatibilityTarget,
   ConnectorEntry,
+  MunitVersions,
   evaluateCompatibility,
   resolveTarget,
 } from '../compat/evaluate.js';
@@ -65,7 +66,32 @@ export interface CompatibilityReport {
   descriptor?: ArtifactDescriptor;
   connectors: ConnectorReport[];
   toolchain?: { maven?: MavenToolchain; pins: JdkPin[] };
+  /** MUnit plugin, runner, and tools versions declared in pom.xml. */
+  munit: MunitVersions;
   findings: Finding[];
+}
+
+/**
+ * MUnit versions from pom.xml: the munit-maven-plugin (or the munit.version
+ * property) and the munit-runner and munit-tools dependencies, with `${...}`
+ * resolved against project properties.
+ */
+export function munitVersions(pom: string, properties = getPomProperties(pom)): MunitVersions {
+  const dependencies = getDependencies(pom);
+  const dependency = (artifactId: string) =>
+    dependencies.find(
+      (entry) =>
+        entry.artifactId === artifactId &&
+        (entry.groupId === undefined || entry.groupId === 'com.mulesoft.munit')
+    )?.version;
+  const versions: MunitVersions = {};
+  const plugin = getPluginVersion(pom, 'munit-maven-plugin') ?? properties['munit.version'];
+  const runner = dependency('munit-runner');
+  const tools = dependency('munit-tools');
+  if (plugin) versions.plugin = plugin;
+  if (runner) versions.runner = runner;
+  if (tools) versions.tools = tools;
+  return versions;
 }
 
 function connectorReport(entry: ConnectorEntry): ConnectorReport {
@@ -153,6 +179,7 @@ export async function evaluateProjectCompatibility(
       connectors = connectorsFromRepository(pom.data);
     }
 
+    const munit = munitVersions(pom.data, properties);
     const target = resolveTarget({
       configured: config.data.target,
       appRuntime,
@@ -166,7 +193,8 @@ export async function evaluateProjectCompatibility(
       descriptor,
       descriptorFile: 'mule-artifact.json',
       connectors,
-      munitVersion: getPluginVersion(pom.data, 'munit-maven-plugin') ?? properties['munit.version'],
+      munitVersion: munit.plugin,
+      munit,
       mavenPluginVersion: getPluginVersion(pom.data, 'mule-maven-plugin'),
     };
     if (options.toolchain ?? true) {
@@ -183,6 +211,7 @@ export async function evaluateProjectCompatibility(
       descriptor,
       connectors: connectors.map(connectorReport),
       toolchain: facts.toolchain,
+      munit,
       findings,
     });
   } catch (error) {

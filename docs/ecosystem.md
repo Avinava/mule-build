@@ -25,6 +25,20 @@ flowchart LR
     Skills --> Connect
 ```
 
+## Artifact handoff to anypoint-connect
+
+The JAR itself tells a deployer how it was built. Every JAR that `mule-build` packages contains
+`META-INF/mule-build/build-info.json` with schema version 1:
+
+```json
+{"schemaVersion":1,"tool":"mule-build","toolVersion":"3.2.0","stripped":false,"productionDeployable":true}
+```
+
+`productionDeployable` is always the inverse of `stripped`. A `--strip-secure` build is
+`productionDeployable: false` and must be refused for a production target. A JAR without the file was
+not packaged by `mule-build` 3.2 or later. The [CLI reference](cli.md#build-info-marker) describes each
+field.
+
 ## mule-build and mule-lint
 
 Both tools look at secrets, at different points:
@@ -38,7 +52,7 @@ Both tools classify sensitive keys identically, and
 (`MB-CMP-*`) and toolchain checks (`MB-TC-*`) need resolved connector JARs and the local JDK, so only
 `mule-build` runs them. Neither tool reads the other's reports or exit codes.
 
-Rules that cover the same ground, as of mule-lint 2.1.0:
+Rules that cover the same ground, as of mule-lint 2.2.0:
 
 | mule-build | mule-lint | Notes |
 | --- | --- | --- |
@@ -48,6 +62,7 @@ Rules that cover the same ground, as of mule-lint 2.1.0:
 | `MB-SEC-006` | `SEC-017` | Both are errors |
 | `MB-SEC-007` | `SEC-018` | Both are warnings |
 | `MB-CMP-005` (descriptor Java vs `minMuleVersion`) | `OPS-005` | mule-lint warns only when no declared Java version is supported |
+| `MB-TC-007`, `MB-TC-002` (MUnit versions) | `TEST-002` | `TEST-002` checks declared Java 17 and is a warning; `MB-TC-002` also checks the JDK in use and is an error |
 
 ## A note on the name
 

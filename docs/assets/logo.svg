@@ -1,59 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="100%" height="auto">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 288" width="960" height="288" role="img" aria-labelledby="title desc">
+  <title id="title">Mule Build</title>
+  <desc id="desc">Mule Build: validate, test, package and release Mule 4 apps. A terminal prompt with a hammer.</desc>
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a" />
-      <stop offset="100%" stop-color="#1e293b" />
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220" />
+      <stop offset="1" stop-color="#1e293b" />
     </linearGradient>
-    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#f97316" />
-      <stop offset="100%" stop-color="#facc15" />
+    <radialGradient id="halo" cx="150" cy="152" r="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f59e0b" stop-opacity="0.18" />
+      <stop offset="1" stop-color="#f59e0b" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#e2e8f0" stroke-opacity="0.04" />
+    </pattern>
+    <clipPath id="card">
+      <rect width="960" height="288" rx="28" />
+    </clipPath>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f97316" />
+      <stop offset="1" stop-color="#facc15" />
     </linearGradient>
-    <linearGradient id="hammerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f97316" />
-      <stop offset="100%" stop-color="#ef4444" />
+    <linearGradient id="iconStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f97316" />
+      <stop offset="1" stop-color="#facc15" />
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3" />
+    <linearGradient id="hammer" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f97316" />
+      <stop offset="1" stop-color="#ef4444" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#020617" flood-opacity="0.5" />
     </filter>
   </defs>
 
-  <!-- Background -->
-  <rect width="800" height="240" rx="24" fill="url(#bg)" filter="url(#shadow)" />
+  <g clip-path="url(#card)">
+    <rect width="960" height="288" fill="url(#bg)" />
+    <rect width="960" height="288" fill="url(#grid)" />
+    <rect width="960" height="288" fill="url(#halo)" />
+  </g>
+  <rect x="0.5" y="0.5" width="959" height="287" rx="27.5" fill="none" stroke="#e2e8f0" stroke-opacity="0.08" />
 
-  <!-- Terminal Window Decoration -->
-  <circle cx="40" cy="40" r="6" fill="#ef4444" />
-  <circle cx="64" cy="40" r="6" fill="#eab308" />
-  <circle cx="88" cy="40" r="6" fill="#22c55e" />
+  <g transform="translate(44 44)">
+    <circle cx="0" cy="0" r="7" fill="#ff5f57" />
+    <circle cx="24" cy="0" r="7" fill="#febc2e" />
+    <circle cx="48" cy="0" r="7" fill="#28c840" />
+  </g>
 
-  <!-- Icon: Terminal with Hammer -->
-  <g transform="translate(70, 70)">
-    <!-- Main terminal box -->
-    <rect width="100" height="100" rx="24" fill="#0f172a" stroke="url(#textGrad)" stroke-width="4" filter="url(#shadow)" />
-
-    <!-- Terminal prompt chevron -->
-    <path d="M 25 35 L 43 50 L 25 65" fill="none" stroke="#22c55e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
-
-    <!-- Hammer inside the terminal -->
-    <g transform="translate(68, 65) rotate(-25)">
-      <!-- Handle -->
+  <!-- Icon: terminal with hammer -->
+  <g transform="translate(92 94) scale(1.16)">
+    <rect width="100" height="100" rx="24" fill="#0f172a" stroke="url(#iconStroke)" stroke-width="4" filter="url(#shadow)" />
+    <path d="M25 35 43 50 25 65" fill="none" stroke="#22c55e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+    <g transform="translate(68 65) rotate(-25)">
       <rect x="-4" y="-12" width="8" height="34" rx="4" fill="#94a3b8" />
-      <!-- Head -->
-      <rect x="-18" y="-22" width="36" height="16" rx="4" fill="url(#hammerGrad)" filter="url(#shadow)" />
-      <!-- Side detail on head -->
+      <rect x="-18" y="-22" width="36" height="16" rx="4" fill="url(#hammer)" />
       <rect x="-10" y="-18" width="10" height="4" rx="2" fill="#0f172a" opacity="0.3" />
     </g>
-
-    <!-- Small build sparks -->
     <circle cx="48" cy="30" r="3" fill="#facc15" />
     <circle cx="60" cy="18" r="2" fill="#38bdf8" />
   </g>
 
-  <!-- Typography -->
-  <g transform="translate(220, 130)">
-    <text x="0" y="0" font-family="system-ui, -apple-system, sans-serif" font-size="64" font-weight="800" letter-spacing="-1.5">
-      <tspan fill="#f8fafc">Mule</tspan>
-      <tspan fill="url(#textGrad)">Build</tspan>
-    </text>
-    <text x="0" y="45" fill="#94a3b8" font-family="monospace" font-size="20" letter-spacing="-0.5">Type-safe MuleSoft build automation</text>
-  </g>
+  <text x="276" y="150" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="68" font-weight="800" letter-spacing="-1.5"><tspan fill="#f8fafc">Mule</tspan><tspan dx="16" fill="url(#accent)">Build</tspan></text>
+  <text x="278" y="196" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="20">Validate, test, package and release Mule 4 apps</text>
 </svg>

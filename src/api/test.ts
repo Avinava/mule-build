@@ -2,8 +2,9 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { canTest } from '../config/SystemChecker.js';
 import { mavenTest } from '../engine/MavenBuilder.js';
-import { Result, TestMetrics, TestOptions, TestResult, err, ok } from '../types/index.js';
+import { Result, TestJdk, TestMetrics, TestOptions, TestResult, err, ok } from '../types/index.js';
 import { parseMavenTestTotals } from '../engine/MavenOutputParser.js';
+import { JavaHomeEnv, MavenToolchain, javaHomeSource } from '../engine/Toolchain.js';
 
 function collectFiles(root: string): string[] {
   if (!existsSync(root)) return [];
@@ -45,6 +46,25 @@ function parseApplicationCoverage(output: string, coverageReports: string[]): nu
   return undefined;
 }
 
+/**
+ * The JDK report for a test result. Only the `mvn -v` facts and whether JAVA_HOME
+ * selected the JDK are returned; no other environment values.
+ */
+export function testJdk(
+  maven: MavenToolchain | undefined,
+  env: JavaHomeEnv = process.env
+): TestJdk | undefined {
+  if (!maven?.javaVersion && !maven?.javaHome) return undefined;
+  const jdk: TestJdk = {};
+  if (maven.javaVersion) jdk.javaVersion = maven.javaVersion;
+  if (maven.javaVendor) jdk.javaVendor = maven.javaVendor;
+  if (maven.javaHome) jdk.javaHome = maven.javaHome;
+  const source = javaHomeSource(maven.javaHome, env);
+  if (source) jdk.javaHomeSource = source;
+  if (maven.mavenVersion) jdk.mavenVersion = maven.mavenVersion;
+  return jdk;
+}
+
 export async function testProject(options: TestOptions = {}): Promise<Result<TestResult>> {
   const cwd = options.cwd ?? process.cwd();
   const suite = options.suite?.trim();
@@ -57,6 +77,7 @@ export async function testProject(options: TestOptions = {}): Promise<Result<Tes
 
   const readiness = await canTest(cwd);
   if (!readiness.success) return err(readiness.error ?? new Error('Test requirements not met'));
+  const jdk = testJdk(readiness.data);
   const run = await mavenTest({
     cwd,
     clean: options.clean ?? false,
@@ -88,5 +109,6 @@ export async function testProject(options: TestOptions = {}): Promise<Result<Tes
     reportPaths,
     coverageReportPaths,
     ...(applicationCoverage === undefined ? {} : { applicationCoverage }),
+    ...(jdk ? { jdk } : {}),
   });
 }

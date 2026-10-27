@@ -29,8 +29,10 @@ import { getXmlFiles, removeSecurePropertiesConfig, stripSecure } from '../engin
 import { findBuiltJar, mavenBuild } from '../engine/MavenBuilder.js';
 import { getPomInfo, getProjectName, setVersion } from '../engine/PomParser.js';
 import { inspectArtifact } from '../engine/ArtifactIdentity.js';
+import { BUILD_INFO_PATH, addBuildInfo, createBuildInfo } from '../engine/BuildInfo.js';
 import { isWorkingTreeClean } from '../utils/git.js';
 import { logger } from '../utils/logger.js';
+import { PACKAGE_VERSION } from '../version.js';
 
 function safeName(value: string): string {
   return (
@@ -182,7 +184,14 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     const jar = findBuiltJar(buildCwd);
     if (!jar.success || !jar.data) return err(jar.error ?? new Error('Built JAR not found'));
 
-    const bytes = readFileSync(jar.data);
+    const stripped = processMode === 'strip';
+    const buildInfo = createBuildInfo(stripped, PACKAGE_VERSION);
+    const bytes = addBuildInfo(readFileSync(jar.data), buildInfo);
+    // Mark the Maven output too, so no JAR from this build lacks the marker.
+    writeFileSync(jar.data, bytes);
+    configChanges.push(
+      `Wrote ${BUILD_INFO_PATH} (stripped=${stripped}, productionDeployable=${buildInfo.productionDeployable})`
+    );
     const identity = inspectArtifact(bytes, pom.data.artifactId);
     if (!identity.coordinates)
       return err(new Error('Built JAR is missing the project Maven metadata'));
@@ -257,6 +266,8 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
         `Version: ${version}`,
         `Built By: ${deploymentInfo.builtBy}`,
         `Machine: ${deploymentInfo.machine}`,
+        `Stripped: ${stripped}`,
+        `Production Deployable: ${buildInfo.productionDeployable}`,
         ...configChanges.map((change) => `- ${change}`),
         `Original JAR: ${basename(jar.data)}`,
         ...findings.map((finding) => `Finding: ${formatFinding(finding)}`),
@@ -266,6 +277,9 @@ export async function packageProject(options: PackageOptions = {}): Promise<Resu
     return ok({
       jarPath: finalPath,
       artifact,
+      stripped,
+      productionDeployable: buildInfo.productionDeployable,
+      buildInfo,
       deploymentInfo,
       metrics: build.data?.metrics,
       findings,

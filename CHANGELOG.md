@@ -1,6 +1,36 @@
 # Changelog
 
-## Unreleased
+## 3.2.0 - 2026-10-27
+
+### Added
+
+- Every packaged JAR contains `META-INF/mule-build/build-info.json`:
+  `{"schemaVersion":1,"tool":"mule-build","toolVersion":"<x.y.z>","stripped":<bool>,"productionDeployable":<bool>}`,
+  with `productionDeployable` always `!stripped`. A `--strip-secure` build is marked
+  `stripped: true, productionDeployable: false`, so a deployer can refuse it from the JAR alone. The
+  entry is appended without rewriting existing entries and is also written to the Maven output in
+  `target/`. A project that ships its own file at that path fails the build.
+- `PackageResult` and MCP `run_build` return `stripped`, `productionDeployable`, and `buildInfo`;
+  `deployment-info.txt` records both flags. `readBuildInfo` and `BUILD_INFO_PATH` are exported.
+- `release --bump prerelease --preid <id>` and MCP `bump: "prerelease"` with `preid`: `1.4.2` becomes
+  `1.4.2-hotfix.1`, then `1.4.2-hotfix.2`.
+- `release --version <version>` and MCP `version` release an explicit strict semantic version.
+  Four-part versions such as `1.4.2.1`, a `v` prefix, and `+build` metadata are rejected with a clear
+  error. `bump` is optional when `version` is given.
+- `compat` and `check_compatibility` read the `munit-runner` and `munit-tools` dependency versions as
+  well as the `munit-maven-plugin`, resolving `${...}` properties, and return them as `munit`. New
+  `MB-TC-007` warns when they differ. The Java 17 MUnit minimum (`MB-TC-002`) is checked against the
+  lowest of the three.
+- `test` and `run_tests` report the JDK Maven ran on as `jdk` (`javaVersion`, `javaVendor`,
+  `javaHome`, `javaHomeSource`, `mavenVersion`). `javaHomeSource` is `JAVA_HOME`, `PATH`, or
+  `override`; the JAVA_HOME value itself is never returned. `system_check` results include
+  `mavenToolchain`.
+
+### Changed
+
+- Global CLI options (`-C`, `-v`, `--version`) must come before the command. This fixes
+  `package --version <version>`, which printed the tool version and exited without building.
+  `mule-build package -v` is now an unknown option; write `mule-build -v package`.
 
 ### Fixed
 

@@ -84,7 +84,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'run_tests',
       {
-        description: 'Run full or focused MUnit tests without packaging or releasing.',
+        description:
+          'Run full or focused MUnit tests without packaging or releasing. The result reports the JDK Maven used (jdk.javaVersion, javaHome, javaHomeSource).',
         inputSchema: {
           cwd: z.string().optional(),
           profile: z.string().optional(),
@@ -105,7 +106,7 @@ export class MuleBuildMcpServer {
         const result = await testProject(args);
         return result.success && result.data
           ? success(
-              `Tests passed: ${result.data.metrics.testsRun} run, ${result.data.metrics.skipped} skipped`,
+              `Tests passed: ${result.data.metrics.testsRun} run, ${result.data.metrics.skipped} skipped${result.data.jdk?.javaVersion ? ` on Java ${result.data.jdk.javaVersion}${result.data.jdk.javaHomeSource ? ` (${result.data.jdk.javaHomeSource})` : ''}` : ''}`,
               result.data
             )
           : buildFailure(result.error);
@@ -115,7 +116,8 @@ export class MuleBuildMcpServer {
     this.server.registerTool(
       'run_build',
       {
-        description: 'Build a Mule 4 application package. Never use for non-Mule projects.',
+        description:
+          'Build a Mule 4 application package. Never use for non-Mule projects. Every JAR carries META-INF/mule-build/build-info.json; stripSecure builds are marked stripped=true, productionDeployable=false.',
         inputSchema: {
           cwd: z.string().optional(),
           profile: z.string().optional(),
@@ -144,7 +146,12 @@ export class MuleBuildMcpServer {
           outputDir: args.outputDir,
         });
         return result.success && result.data
-          ? success(`Build successful: ${result.data.jarPath}`, result.data)
+          ? success(
+              result.data.stripped
+                ? `Build successful: ${result.data.jarPath}. Secure properties were stripped; this JAR is marked productionDeployable=false and must not be deployed to production.`
+                : `Build successful: ${result.data.jarPath}`,
+              result.data
+            )
           : buildFailure(result.error);
       }
     );
@@ -231,7 +238,22 @@ export class MuleBuildMcpServer {
         description: 'Preview or execute a transactional Mule application release.',
         inputSchema: {
           cwd: z.string().optional(),
-          bump: z.enum(['major', 'minor', 'patch']),
+          bump: z
+            .enum(['major', 'minor', 'patch', 'prerelease'])
+            .optional()
+            .describe('Required unless version is given'),
+          preid: z
+            .string()
+            .optional()
+            .describe(
+              'Prerelease identifier for bump=prerelease: 1.4.2 -> 1.4.2-hotfix.1 -> 1.4.2-hotfix.2'
+            ),
+          version: z
+            .string()
+            .optional()
+            .describe(
+              'Explicit strict semantic version instead of bump; four-part versions are rejected'
+            ),
           noTag: z.boolean().optional(),
           noPush: z.boolean().optional(),
           confirm: z.boolean().optional().describe('Must be true to mutate git state'),
@@ -244,10 +266,12 @@ export class MuleBuildMcpServer {
           openWorldHint: true,
         },
       },
-      async ({ cwd, bump, noTag, noPush, confirm }) => {
+      async ({ cwd, bump, preid, version, noTag, noPush, confirm }) => {
         const result = await releaseVersion({
           cwd,
           bump,
+          preid,
+          version,
           tag: !noTag,
           push: !noPush,
           dryRun: confirm !== true,

@@ -25,6 +25,20 @@ flowchart LR
     Skills --> Connect
 ```
 
+## Artifact handoff to anypoint-connect
+
+The JAR itself tells a deployer how it was built. Every JAR that `mule-build` packages contains
+`META-INF/mule-build/build-info.json` with schema version 1:
+
+```json
+{"schemaVersion":1,"tool":"mule-build","toolVersion":"3.2.0","stripped":false,"productionDeployable":true}
+```
+
+`productionDeployable` is always the inverse of `stripped`. A `--strip-secure` build is
+`productionDeployable: false` and must be refused for a production target. A JAR without the file was
+not packaged by `mule-build` 3.2 or later. The [CLI reference](cli.md#build-info-marker) describes each
+field.
+
 ## mule-build and mule-lint
 
 Both tools look at secrets, at different points:

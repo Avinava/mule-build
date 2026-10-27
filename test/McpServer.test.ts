@@ -43,6 +43,26 @@ describe('Mule Build MCP protocol', () => {
     }
   });
 
+  it('accepts prerelease and explicit versions in release_version', async () => {
+    const response = await client.listTools();
+    const release = response.tools.find((tool) => tool.name === 'release_version');
+    const properties = release?.inputSchema.properties as Record<string, { enum?: string[] }>;
+    expect(properties.bump.enum).toEqual(['major', 'minor', 'patch', 'prerelease']);
+    expect(properties).toHaveProperty('preid');
+    expect(properties).toHaveProperty('version');
+    expect(release?.inputSchema.required ?? []).not.toContain('bump');
+
+    const rejected = await client.callTool({
+      name: 'release_version',
+      arguments: { cwd: process.cwd(), version: '1.4.2.1' },
+    });
+    expect(rejected.isError).toBe(true);
+    expect(rejected.structuredContent).toMatchObject({ success: false });
+    expect(String((rejected.structuredContent as { message: string }).message)).toContain(
+      'four numeric parts'
+    );
+  });
+
   it('returns structured content from a real tool call', async () => {
     const response = await client.callTool({
       name: 'get_project_config',

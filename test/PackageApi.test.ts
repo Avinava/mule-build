@@ -10,9 +10,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { strToU8, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packageProject } from '../src/api/package.js';
+import { BUILD_INFO_PATH, readBuildInfo } from '../src/engine/BuildInfo.js';
+import { PACKAGE_VERSION } from '../src/version.js';
 import { mavenBuild } from '../src/engine/MavenBuilder.js';
 import { getVersion } from '../src/engine/PomParser.js';
 import { inspectArtifact } from '../src/engine/ArtifactIdentity.js';
@@ -132,6 +134,63 @@ describe('verified package handoff', () => {
     expect(result.error?.message).toContain('symbolic link');
     expect(readFileSync(original, 'utf8')).toBe(xml);
     expect(mavenBuild).not.toHaveBeenCalled();
+  });
+
+  it('marks a stripped build as not production deployable inside the JAR', async () => {
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow>${secure::sample.password}</flow>'
+    );
+    const result = await packageProject({ cwd: root, stripSecure: true });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      stripped: true,
+      productionDeployable: false,
+      buildInfo: {
+        schemaVersion: 1,
+        tool: 'mule-build',
+        toolVersion: PACKAGE_VERSION,
+        stripped: true,
+        productionDeployable: false,
+      },
+    });
+    const bytes = readFileSync(result.data!.jarPath);
+    const marker = JSON.parse(strFromU8(unzipSync(bytes)[BUILD_INFO_PATH]));
+    expect(marker).toEqual(result.data!.buildInfo);
+    expect(Object.keys(marker).sort()).toEqual(
+      ['productionDeployable', 'schemaVersion', 'stripped', 'tool', 'toolVersion'].sort()
+    );
+    expect(result.data?.artifact.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(readFileSync(join(root, 'target/deployment-info.txt'), 'utf8')).toContain(
+      'Production Deployable: false'
+    );
+  });
+
+  it('writes stripped=false into every non-stripped JAR, including the Maven output', async () => {
+    const result = await packageProject({ cwd: root });
+    expect(result.data).toMatchObject({ stripped: false, productionDeployable: true });
+    expect(readBuildInfo(readFileSync(result.data!.jarPath))).toEqual(result.data!.buildInfo);
+    expect(
+      readBuildInfo(readFileSync(join(root, 'target/sample-mule-application.jar')))
+    ).toMatchObject({ stripped: false, productionDeployable: true });
+  });
+
+  it('fails when project resources ship their own build-info marker', async () => {
+    vi.mocked(mavenBuild).mockImplementation(async ({ cwd }) => {
+      mkdirSync(join(cwd!, 'target'), { recursive: true });
+      writeFileSync(
+        join(cwd!, 'target/sample-mule-application.jar'),
+        zipSync({
+          'META-INF/maven/dev.sample/sample/pom.properties': strToU8(
+            'groupId=dev.sample\nartifactId=sample\nversion=1.2.3\n'
+          ),
+          [BUILD_INFO_PATH]: strToU8('{"stripped":false,"productionDeployable":true}'),
+        })
+      );
+      return ok({ metrics: { durationMs: 1 } });
+    });
+    const result = await packageProject({ cwd: root, stripSecure: true });
+    expect(result.error?.message).toContain('reserved for mule-build');
   });
 
   it('returns actual identity even when the output filename is a display label', async () => {

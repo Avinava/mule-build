@@ -5,8 +5,9 @@
  * files in the project.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import type { JavaHomeSource } from '../types/index.js';
 import { exec } from '../utils/exec.js';
 
 export interface MavenToolchain {
@@ -53,6 +54,31 @@ export async function detectMavenToolchain(cwd: string): Promise<MavenToolchain 
   const result = await exec('mvn', ['-v', '-B'], { cwd });
   if (!result.success || !result.data || result.data.exitCode !== 0) return undefined;
   return parseMavenVersionOutput(`${result.data.stdout}\n${result.data.stderr}`);
+}
+
+function canonicalPath(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, '');
+  try {
+    return realpathSync(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
+ * Whether Maven's java.home came from JAVA_HOME. Only the JAVA_HOME variable is
+ * read, and it is compared, never returned.
+ */
+export function javaHomeSource(
+  javaHome: string | undefined,
+  envJavaHome: string | undefined = process.env.JAVA_HOME
+): JavaHomeSource | undefined {
+  if (!envJavaHome?.trim()) return 'PATH';
+  if (!javaHome) return undefined;
+  const runtime = canonicalPath(javaHome);
+  const configured = canonicalPath(envJavaHome.trim());
+  // Java 8 reports java.home as $JAVA_HOME/jre.
+  return runtime === configured || runtime === join(configured, 'jre') ? 'JAVA_HOME' : 'override';
 }
 
 function readPin(

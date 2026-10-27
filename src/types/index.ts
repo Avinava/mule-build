@@ -9,7 +9,7 @@ export type BuildProfile = string;
 export type BuildEnvironment = BuildProfile;
 
 // Version bump types
-export type BumpType = 'major' | 'minor' | 'patch';
+export type BumpType = 'major' | 'minor' | 'patch' | 'prerelease';
 
 // Secure property processing modes
 export type ProcessMode = 'strip' | 'enforce' | 'unchanged';
@@ -157,6 +157,21 @@ export interface PackageOptions {
 }
 
 /**
+ * Contents of META-INF/mule-build/build-info.json (schema version 1), written
+ * into every JAR that mule-build packages.
+ */
+export interface BuildInfo {
+  schemaVersion: 1;
+  tool: 'mule-build';
+  /** mule-build version that packaged the JAR. */
+  toolVersion: string;
+  /** Whether secure:: prefixes and secure-properties:config were stripped. */
+  stripped: boolean;
+  /** Always the inverse of stripped. A stripped JAR must never reach production. */
+  productionDeployable: boolean;
+}
+
+/**
  * Package command result
  */
 export interface PackageResult {
@@ -164,6 +179,12 @@ export interface PackageResult {
   jarPath: string;
   /** Verified embedded Maven coordinates and SHA-256 of the returned JAR. */
   artifact: { groupId: string; artifactId: string; version: string; sha256: string };
+  /** Whether secure properties were stripped from this JAR. */
+  stripped: boolean;
+  /** False for stripped builds. Also recorded in META-INF/mule-build/build-info.json. */
+  productionDeployable: boolean;
+  /** The marker written to META-INF/mule-build/build-info.json inside the JAR. */
+  buildInfo: BuildInfo;
   /** Deployment information */
   deploymentInfo: DeploymentInfo;
   /** Build metrics (duration, tests, warnings) */
@@ -196,12 +217,32 @@ export interface TestMetrics {
   skipped: number;
 }
 
+/**
+ * Where Maven's JDK came from: the JAVA_HOME environment variable, the `java` on
+ * PATH (JAVA_HOME unset), or something that overrode JAVA_HOME such as
+ * ~/.mavenrc or a wrapper script.
+ */
+export type JavaHomeSource = 'JAVA_HOME' | 'PATH' | 'override';
+
+/** The JDK Maven ran the tests on, as reported by `mvn -v` in the project directory. */
+export interface TestJdk {
+  /** Java feature version, e.g. 17. */
+  javaVersion?: string;
+  javaVendor?: string;
+  /** java.home reported by Maven. */
+  javaHome?: string;
+  javaHomeSource?: JavaHomeSource;
+  mavenVersion?: string;
+}
+
 /** Structured result from a focused or full MUnit run. */
 export interface TestResult {
   metrics: TestMetrics;
   reportPaths: string[];
   coverageReportPaths: string[];
   applicationCoverage?: number;
+  /** Effective JDK for the Maven run. Absent when `mvn -v` could not be read. */
+  jdk?: TestJdk;
 }
 
 /**
@@ -256,8 +297,15 @@ export interface RunResult {
  * Release command options
  */
 export interface ReleaseOptions {
-  /** Version bump type */
-  bump: BumpType;
+  /** Version bump type. Required unless `version` is given. */
+  bump?: BumpType;
+  /**
+   * Prerelease identifier for `bump: 'prerelease'`, e.g. `hotfix`: 1.4.2 becomes
+   * 1.4.2-hotfix.1 and 1.4.2-hotfix.1 becomes 1.4.2-hotfix.2.
+   */
+  preid?: string;
+  /** Explicit strict semantic version to release instead of a bump, e.g. 1.4.2-hotfix.1. */
+  version?: string;
   /** Create git tag (default: true) */
   tag?: boolean;
   /** Push to remote (default: true) */

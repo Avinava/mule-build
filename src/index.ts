@@ -16,9 +16,16 @@ export {
   systemCheck,
   getRuntimeStatus,
   stopRuntime,
+  BUILD_INFO_PATH,
+  readBuildInfo,
 } from './api/index.js';
 export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from './api/index.js';
-export type { CompatibilityOptions, CompatibilityReport, ConnectorReport } from './api/index.js';
+export type {
+  CompatibilityOptions,
+  CompatibilityReport,
+  ConnectorReport,
+  MunitVersions,
+} from './api/index.js';
 
 // Types
 export type {
@@ -27,6 +34,9 @@ export type {
   TestOptions,
   TestResult,
   TestMetrics,
+  TestJdk,
+  JavaHomeSource,
+  BuildInfo,
   RunOptions,
   RunResult,
   ReleaseOptions,

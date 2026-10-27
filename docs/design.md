@@ -30,6 +30,9 @@ The adapters own presentation and confirmation policy. API functions own orchest
 - A version override updates only a staged POM; the JAR metadata must match the requested version.
 - Artifact coordinates come from embedded Maven metadata and SHA-256 covers the returned bytes.
 - A strip build happens in a temporary staged project; it does not rewrite the checkout.
+- Every packaged JAR carries `META-INF/mule-build/build-info.json` (`src/engine/BuildInfo.ts`). A strip
+  build is marked `stripped: true, productionDeployable: false`. The entry is appended without
+  rewriting existing ZIP entries, and a project that ships its own copy of that path fails the build.
 - Releases preview without mutation when `dryRun` is true. Pushes target the current branch and the newly-created tag only.
 - Runtime state comes from the Mule control command and optional port probes, not directory existence.
 - MCP stdout is reserved for JSON-RPC; diagnostics use stderr.

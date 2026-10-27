@@ -13,6 +13,8 @@ export { stripSecure } from './strip.js';
 export { enforceSecure } from './enforce.js';
 export { checkCompatibility } from './compat.js';
 export type { CompatibilityOptions, CompatibilityReport, ConnectorReport } from './compat.js';
+export type { MunitVersions } from '../compat/evaluate.js';
+export { BUILD_INFO_PATH, readBuildInfo } from '../engine/BuildInfo.js';
 export { systemCheck, getRuntimeStatus, stopRuntime } from './system.js';
 export type { SystemCheckDetail, SystemCheckOperation, SystemCheckResult } from './system.js';
 
@@ -23,6 +25,9 @@ export type {
   TestOptions,
   TestResult,
   TestMetrics,
+  TestJdk,
+  JavaHomeSource,
+  BuildInfo,
   RunOptions,
   RunResult,
   ReleaseOptions,

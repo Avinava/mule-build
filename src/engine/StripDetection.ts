@@ -83,7 +83,7 @@ export function recordStrip(cwd: string, stripped: { file: string; keys: string[
 export function secureKeys(content: string, file: string): string[] {
   return [
     ...new Set(
-      collectReferenceSites(content, file)
+      collectReferenceSites(content, file, { includeCdata: true })
         .filter((site) => site.secure)
         .map((site) => site.name)
     ),
@@ -99,7 +99,9 @@ export function detectStrippedSources(cwd: string): StripEvidence[] {
     ...walkFiles(resources, (name) => name.endsWith('.dwl'), NON_CONFIG_DIRECTORIES),
   ];
   const sites: PropertyReference[] = sources.flatMap((path) =>
-    collectReferenceSites(readFileSync(path, 'utf-8'), projectPath(cwd, path))
+    collectReferenceSites(readFileSync(path, 'utf-8'), projectPath(cwd, path), {
+      includeCdata: true,
+    })
   );
 
   const encrypted = new Set<string>();

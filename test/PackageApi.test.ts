@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -216,6 +217,66 @@ describe('verified package handoff', () => {
     const finding = result.data?.findings?.find((item) => item.code === 'MB-SEC-008');
     expect(finding).toMatchObject({ file: 'src/main/mule/sample.xml', line: 1 });
     expect(JSON.stringify(finding)).not.toContain('c2FtcGxl');
+  });
+
+  it('records and detects stripped DataWeave references inside CDATA', async () => {
+    const flow = join(root, 'src/main/mule/sample.xml');
+    writeFileSync(
+      flow,
+      '<flow><ee:set-payload><![CDATA[Mule::p("secure::sample.endpoint")]]></ee:set-payload></flow>'
+    );
+    expect((await stripSecure({ cwd: root })).data?.replacementCount).toBe(1);
+    expect(readFileSync(flow, 'utf8')).toContain('Mule::p("sample.endpoint")');
+    expect(JSON.parse(readFileSync(join(root, STRIP_STATE_PATH), 'utf8')).files).toEqual([
+      { file: 'src/main/mule/sample.xml', keys: ['sample.endpoint'] },
+    ]);
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(false);
+  });
+
+  it('detects an encrypted value referenced without secure:: inside CDATA', async () => {
+    mkdirSync(join(root, 'src/main/resources'), { recursive: true });
+    writeFileSync(
+      join(root, 'src/main/resources/secure.yaml'),
+      'sample:\n  token: "![c2FtcGxl]"\n'
+    );
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><ee:set-payload><![CDATA[Mule::p("sample.token")]]></ee:set-payload></flow>'
+    );
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(false);
+  });
+
+  it('ignores stripped-looking references inside XML comments', async () => {
+    mkdirSync(join(root, 'src/main/resources'), { recursive: true });
+    writeFileSync(
+      join(root, 'src/main/resources/secure.yaml'),
+      'sample:\n  token: "![c2FtcGxl]"\n'
+    );
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><!-- ${sample.token} --><set-variable value="${secure::sample.token}"/></flow>'
+    );
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(true);
+  });
+
+  it('records a partial strip when a later file cannot be written', async () => {
+    const first = join(root, 'src/main/mule/a.xml');
+    const second = join(root, 'src/main/mule/b.xml');
+    writeFileSync(first, '<flow><set-variable value="${secure::sample.first}"/></flow>');
+    writeFileSync(second, '<flow><set-variable value="${secure::sample.second}"/></flow>');
+    chmodSync(second, 0o444);
+    try {
+      const result = await stripSecure({ cwd: root });
+      expect(result.success).toBe(false);
+    } finally {
+      chmodSync(second, 0o644);
+    }
+    expect(readFileSync(first, 'utf8')).toContain('${sample.first}');
+    const package_ = await packageProject({ cwd: root });
+    expect(package_.data?.productionDeployable).toBe(false);
+    expect(package_.data?.findings?.find((finding) => finding.code === 'MB-SEC-008')).toMatchObject(
+      { file: 'src/main/mule/a.xml' }
+    );
   });
 
   it('refuses a production build of sources stripped in place', async () => {

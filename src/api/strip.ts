@@ -54,6 +54,19 @@ export async function stripSecure(options: StripOptions = {}): Promise<Result<St
         })
         .filter((entry) => entry.keys.length > 0);
 
+  // Record the intent before any file changes, so a partial strip (a later file
+  // fails to write) is still tracked. Detection only counts keys that are still
+  // unprefixed, so recording a file the strip never reached is harmless.
+  try {
+    recordStrip(cwd, stripped);
+  } catch (error) {
+    return err(
+      new Error(
+        `Could not write the strip record, so no files were changed: ${(error as Error).message}`
+      )
+    );
+  }
+
   const result = await stripSecureEngine(target, {
     dryRun: options.dryRun,
     cwd,
@@ -62,8 +75,6 @@ export async function stripSecure(options: StripOptions = {}): Promise<Result<St
   if (!result.success || !result.data) {
     return err(result.error ?? new Error('Strip operation failed'));
   }
-  // Recorded so a later normal package marks the JAR productionDeployable=false.
-  recordStrip(cwd, stripped);
 
   if (options.dryRun) {
     logger.info(`Would process ${result.data.filesProcessed.length} files`);

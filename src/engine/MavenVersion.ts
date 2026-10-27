@@ -71,7 +71,15 @@ class ListItem {
     }
   }
   compare(other: Item | undefined): number {
-    if (other === undefined) return this.items.length === 0 ? 0 : this.items[0].compare(undefined);
+    if (other === undefined) {
+      // Compare every element with absence, not only the first (MNG-6964):
+      // 3.1.0-0.rc.1 is older than 3.1.0.
+      for (const item of this.items) {
+        const result = item.compare(undefined);
+        if (result !== 0) return result;
+      }
+      return 0;
+    }
     if (other instanceof IntItem) return -1;
     if (other instanceof StringItem) return 1;
     const length = Math.max(this.items.length, other.items.length);

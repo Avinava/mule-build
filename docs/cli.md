@@ -128,7 +128,11 @@ themselves lost their `secure::` prefixes, for example after `mule-build strip`.
   `{"schemaVersion":1,"files":[{"file":"src/main/mule/orders.xml","keys":["db.password"]}]}`.
   While a recorded file still references a recorded key without `secure::`, the sources count as
   stripped. This catches keys whose encrypted values are not in the project. An unreadable record also
-  counts as stripped.
+  counts as stripped. The record is written before any file changes, so a strip that fails partway
+  is still tracked.
+
+Both signals read references inside CDATA, where Mule keeps inline DataWeave such as
+`<![CDATA[Mule::p("secure::db.password")]]>`, and ignore XML comments.
 
 Each piece of evidence is a `MB-SEC-008` warning naming the file, line, and key (never a value). A
 profile with `secureProperties: enforce`, such as `production`, refuses to build stripped sources.
@@ -344,7 +348,8 @@ Before changing anything, the release refuses when:
 
 The preview runs the same version and tag checks and fails the same way. It lists push blockers as
 warnings. The real release then edits `pom.xml`, builds, commits, tags, and pushes the branch and tag in
-one atomic `git push --atomic`, so the remote takes both or neither. If any step fails, the release
+one atomic `git push --atomic --no-follow-tags`, so the remote takes both or neither, and
+`push.followTags` cannot add other tags. If any step fails, the release
 rolls back: the new tag is deleted, the release commit is undone with `git reset --soft`, and `pom.xml`
 is restored byte for byte. Nothing reached the remote, so no shared history is rewritten.
 `doctor --operation release` checks that the project is in a Git repository with a clean working tree

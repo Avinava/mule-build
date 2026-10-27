@@ -142,7 +142,8 @@ export async function pushRelease(
     return err(branchResult.error ?? new Error('Cannot push a release from detached HEAD'));
   }
   const refs = [`refs/heads/${branchResult.data}`, ...(tagName ? [`refs/tags/${tagName}`] : [])];
-  const pushResult = await git(cwd, ['push', '--atomic', 'origin', ...refs]);
+  // --no-follow-tags overrides push.followTags, so no unrelated annotated tag rides along.
+  const pushResult = await git(cwd, ['push', '--atomic', '--no-follow-tags', 'origin', ...refs]);
   if (!pushResult.success) return err(new Error(`Failed to push: ${pushResult.error?.message}`));
   return ok(undefined);
 }

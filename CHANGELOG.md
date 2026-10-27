@@ -33,7 +33,8 @@
   productionDeployable: false` and reports `MB-SEC-008`. The evidence is either a reference without
   `secure::` to a key whose value is encrypted (`![...]`) in `src/main/resources`, or a key recorded in
   `.mule-build/strip-state.json`, which `mule-build strip` now writes, that is still unprefixed.
-  Enforcing profiles refuse such sources.
+  References inside CDATA (inline DataWeave) count; XML comments do not. The record is written before
+  any file changes, so a strip that fails partway is tracked. Enforcing profiles refuse such sources.
 - Release previews list push blockers (detached `HEAD`, no `origin`) in `warnings`.
 
 ### Changed
@@ -41,13 +42,14 @@
 - `release` is a transaction. Before any change it refuses an existing `v<version>` tag (even with
   `--no-tag`), a version not newer in Maven order than every version tag reachable from `HEAD`, and a
   push from detached `HEAD` or without `origin`. The branch and tag are pushed with one
-  `git push --atomic`. A failed build, commit, tag, or push rolls back the tag, the release commit, and
+  `git push --atomic --no-follow-tags`, so `push.followTags` cannot push unrelated tags. A failed build, commit, tag, or push rolls back the tag, the release commit, and
   `pom.xml`.
 - Bumping from a post-release prerelease starts from its release: `1.4.2-hotfix.1` with
   `--bump patch` gives `1.4.3`, not `1.4.2`. A pre-release such as `1.5.0-rc.1` is still promoted to
   `1.5.0`. The new version must be newer than the current one.
 - Prerelease counters are incremented exactly with BigInt.
-- MUnit and mule-maven-plugin versions are compared in Maven order, so `3.1.0-rc.1` and
+- MUnit and mule-maven-plugin versions are compared in Maven order (a port of Maven's
+  ComparableVersion, checked against Maven's own test cases), so `3.1.0-rc.1`, `3.1.0-0.rc.1`, and
   `3.1.0-SNAPSHOT` no longer pass the Java 17 MUnit minimum.
 - Plugin versions are read from `<build><plugins>`, falling back to `<pluginManagement>` only for a
   declared plugin without a version. Dependency versions omitted in `<dependencies>` are filled from the

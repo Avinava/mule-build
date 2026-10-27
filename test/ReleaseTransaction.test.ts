@@ -170,4 +170,14 @@ describe('release transaction', () => {
     expect(git(remote, 'tag', '--list', 'v1.4.3')).toBe('v1.4.3');
     expect(git(remote, 'log', '-1', '--format=%s')).toBe('Release v1.4.3');
   });
+
+  it('pushes only the release tag even when push.followTags is set', async () => {
+    setup('1.4.2', ['v1.4.2']);
+    const remote = withRemote();
+    git(root, 'tag', '-a', 'sample-unrelated', '-m', 'Unrelated annotated tag');
+    git(root, 'config', 'push.followTags', 'true');
+    const result = await releaseVersion({ cwd: root, bump: 'patch' });
+    expect(result.data?.pushed).toBe(true);
+    expect(git(remote, 'tag', '--list')).toBe('v1.4.3');
+  });
 });

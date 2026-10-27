@@ -51,7 +51,11 @@ a remediation line, which resolves most of what follows without reading further.
 | Symptom | Cause and fix |
 | --- | --- |
 | Release refuses to run | The profile sets `enforceGitClean` and the tree is dirty. Commit or stash first |
-| The tag was not pushed | `--no-push` was passed, or push failed. The release targets the current branch and the new tag only, never all local tags |
+| The tag was not pushed | `--no-push` was passed. A failed push rolls the whole release back, because the branch and tag go out in one atomic push. The release targets the current branch and the new tag only, never all local tags |
+| `Tag v... already exists` | That version was already released. Choose a later version; the release refuses this even with `--no-tag` |
+| `is not newer than v...` | A newer version tag is reachable from `HEAD`. Bump past it, or release a maintenance version from a branch that does not contain the newer tag |
+| `The release was rolled back` | A build, commit, tag, or push step failed. The tag, release commit, and `pom.xml` change were undone; fix the cause and run the release again |
+| `MB-SEC-008` or `stripped in place` on `package` | The sources lost their `secure::` prefixes, usually through `mule-build strip`. Restore them (for example `git restore src/main/mule`), then delete `.mule-build/strip-state.json` |
 | `has four numeric parts` | Versions such as `1.4.2.1` are rejected because the Mule Maven plugin rejects them. Use a prerelease qualifier: `release --bump prerelease --preid hotfix` gives `1.4.2-hotfix.1` |
 | `unknown option '-v'` or `unknown option '-C'` | Put `-C`, `-v`, and the tool `--version` before the command: `mule-build -C app -v package` |
 | An agent released without asking | It should not: `release_version` previews unless called with `confirm: true`. Report it if you see otherwise |

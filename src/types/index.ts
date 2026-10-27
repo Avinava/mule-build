@@ -336,6 +336,8 @@ export interface ReleaseResult {
   pushed: boolean;
   /** Whether this was a non-mutating preview. */
   dryRun?: boolean;
+  /** Preview only: problems that would make the real release refuse to start, such as no origin remote. */
+  warnings?: string[];
 }
 
 /**

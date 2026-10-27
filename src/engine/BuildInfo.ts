@@ -152,12 +152,12 @@ export function addBuildInfo(jar: Uint8Array, info: BuildInfo): Uint8Array {
 
 /** Read the build-info marker, or undefined when the JAR has none or it is invalid. */
 export function readBuildInfo(jar: Uint8Array): BuildInfo | undefined {
-  const entries = unzipSync(jar, {
-    filter: (entry) => entry.name === BUILD_INFO_PATH && entry.originalSize <= 65536,
-  });
-  const content = entries[BUILD_INFO_PATH];
-  if (!content) return undefined;
   try {
+    const entries = unzipSync(jar, {
+      filter: (entry) => entry.name === BUILD_INFO_PATH && entry.originalSize <= 65536,
+    });
+    const content = entries[BUILD_INFO_PATH];
+    if (!content) return undefined;
     const value = JSON.parse(strFromU8(content)) as Partial<BuildInfo>;
     if (
       value.schemaVersion !== 1 ||

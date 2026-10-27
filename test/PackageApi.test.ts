@@ -14,6 +14,8 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packageProject } from '../src/api/package.js';
 import { BUILD_INFO_PATH, readBuildInfo } from '../src/engine/BuildInfo.js';
+import { stripSecure } from '../src/api/strip.js';
+import { STRIP_STATE_PATH } from '../src/engine/StripDetection.js';
 import { PACKAGE_VERSION } from '../src/version.js';
 import { mavenBuild } from '../src/engine/MavenBuilder.js';
 import { getVersion } from '../src/engine/PomParser.js';
@@ -173,6 +175,62 @@ describe('verified package handoff', () => {
     expect(
       readBuildInfo(readFileSync(join(root, 'target/sample-mule-application.jar')))
     ).toMatchObject({ stripped: false, productionDeployable: true });
+  });
+
+  it('marks a normal build non-deployable after an in-place strip (strip-state record)', async () => {
+    const flow = join(root, 'src/main/mule/sample.xml');
+    writeFileSync(flow, '<flow><http:request url="${secure::sample.endpoint}"/></flow>');
+    await stripSecure({ cwd: root, dryRun: true });
+    expect(existsSync(join(root, STRIP_STATE_PATH))).toBe(false);
+    expect((await stripSecure({ cwd: root })).data?.replacementCount).toBe(1);
+    expect(JSON.parse(readFileSync(join(root, STRIP_STATE_PATH), 'utf8'))).toEqual({
+      schemaVersion: 1,
+      files: [{ file: 'src/main/mule/sample.xml', keys: ['sample.endpoint'] }],
+    });
+
+    const result = await packageProject({ cwd: root });
+    expect(result.data).toMatchObject({ stripped: true, productionDeployable: false });
+    expect(readBuildInfo(readFileSync(result.data!.jarPath))).toMatchObject({
+      stripped: true,
+      productionDeployable: false,
+    });
+    expect(result.data?.findings?.map((finding) => finding.code)).toContain('MB-SEC-008');
+
+    // Restoring the prefix makes the sources deployable again, even with a stale record.
+    writeFileSync(flow, '<flow><http:request url="${secure::sample.endpoint}"/></flow>');
+    expect((await packageProject({ cwd: root })).data?.productionDeployable).toBe(true);
+  });
+
+  it('marks a build non-deployable when an encrypted value is referenced without secure::', async () => {
+    mkdirSync(join(root, 'src/main/resources'), { recursive: true });
+    writeFileSync(
+      join(root, 'src/main/resources/secure.yaml'),
+      'sample:\n  token: "![c2FtcGxl]"\n'
+    );
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><set-variable value="${sample.token}"/></flow>'
+    );
+    const result = await packageProject({ cwd: root });
+    expect(result.data).toMatchObject({ stripped: true, productionDeployable: false });
+    const finding = result.data?.findings?.find((item) => item.code === 'MB-SEC-008');
+    expect(finding).toMatchObject({ file: 'src/main/mule/sample.xml', line: 1 });
+    expect(JSON.stringify(finding)).not.toContain('c2FtcGxl');
+  });
+
+  it('refuses a production build of sources stripped in place', async () => {
+    writeFileSync(
+      join(root, 'src/main/mule/sample.xml'),
+      '<flow><http:request url="${secure::sample.endpoint}"/></flow>'
+    );
+    await stripSecure({ cwd: root });
+    const result = await packageProject({
+      cwd: root,
+      profile: 'production',
+      enforceGitClean: false,
+    });
+    expect(result.error?.message).toContain('stripped in place');
+    expect(mavenBuild).not.toHaveBeenCalled();
   });
 
   it('fails when project resources ship their own build-info marker', async () => {

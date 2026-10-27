@@ -5,9 +5,11 @@
  */
 
 import { join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { Result, ok, err, StripOptions, StripResult } from '../types/index.js';
-import { stripSecure as stripSecureEngine } from '../engine/XmlProcessor.js';
+import { getXmlFiles, stripSecure as stripSecureEngine } from '../engine/XmlProcessor.js';
+import { recordStrip, secureKeys } from '../engine/StripDetection.js';
+import { projectPath } from '../utils/files.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -41,6 +43,17 @@ export async function stripSecure(options: StripOptions = {}): Promise<Result<St
     logger.info('Running in dry-run mode. No files will be modified.');
   }
 
+  // Keys that lose their secure:: prefix, read before the files are rewritten.
+  const files = statSync(target).isDirectory() ? getXmlFiles(target) : [target];
+  const stripped = options.dryRun
+    ? []
+    : files
+        .map((file) => {
+          const name = projectPath(cwd, file);
+          return { file: name, keys: secureKeys(readFileSync(file, 'utf-8'), name) };
+        })
+        .filter((entry) => entry.keys.length > 0);
+
   const result = await stripSecureEngine(target, {
     dryRun: options.dryRun,
     cwd,
@@ -49,6 +62,8 @@ export async function stripSecure(options: StripOptions = {}): Promise<Result<St
   if (!result.success || !result.data) {
     return err(result.error ?? new Error('Strip operation failed'));
   }
+  // Recorded so a later normal package marks the JAR productionDeployable=false.
+  recordStrip(cwd, stripped);
 
   if (options.dryRun) {
     logger.info(`Would process ${result.data.filesProcessed.length} files`);

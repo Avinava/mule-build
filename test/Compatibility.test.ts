@@ -275,6 +275,17 @@ describe('evaluateCompatibility', () => {
     });
   });
 
+  it('treats MUnit pre-releases as older than the release they precede', () => {
+    const toolchain = {
+      maven: { javaVersion: '17' },
+      pins: [{ file: '.java-version', value: '17', javaVersion: '17' }],
+    };
+    for (const version of ['3.1.0-rc.1', '3.1.0-SNAPSHOT']) {
+      expect(evaluate({ munit: { plugin: version }, toolchain })).toEqual(['MB-TC-002:error']);
+    }
+    expect(evaluate({ munit: { plugin: '3.1.0-hotfix.1' }, toolchain })).toEqual([]);
+  });
+
   it('accepts matching MUnit components and ignores unresolved ones', () => {
     const toolchain = {
       maven: { javaVersion: '17' },
@@ -394,6 +405,45 @@ describe('toolchain and repository facts', () => {
     ]);
     expect(getPluginVersion(pom, 'munit-maven-plugin')).toBe('3.1.0');
     expect(getPluginVersion(pom, 'mule-maven-plugin')).toBeUndefined();
+  });
+
+  it('reads the declared build plugin, not pluginManagement, and fills managed versions', () => {
+    const pom = `<project>
+      <properties><munit.version>3.1.0</munit.version></properties>
+      <dependencyManagement><dependencies>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-runner</artifactId><version>3.0.0</version><classifier>mule-plugin</classifier></dependency>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-tools</artifactId><version>\${munit.version}</version><classifier>mule-plugin</classifier></dependency>
+        <dependency><groupId>dev.sample</groupId><artifactId>sample-connector</artifactId><version>2.0.0</version><classifier>mule-plugin</classifier></dependency>
+      </dependencies></dependencyManagement>
+      <dependencies>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-runner</artifactId><classifier>mule-plugin</classifier><scope>test</scope></dependency>
+        <dependency><groupId>com.mulesoft.munit</groupId><artifactId>munit-tools</artifactId><classifier>mule-plugin</classifier><scope>test</scope></dependency>
+        <dependency><groupId>dev.sample</groupId><artifactId>sample-connector</artifactId><classifier>mule-plugin</classifier></dependency>
+      </dependencies>
+      <build>
+        <pluginManagement><plugins>
+          <plugin><artifactId>munit-maven-plugin</artifactId><version>2.3.0</version></plugin>
+          <plugin><artifactId>mule-maven-plugin</artifactId><version>4.3.0</version></plugin>
+        </plugins></pluginManagement>
+        <plugins>
+          <plugin><artifactId>munit-maven-plugin</artifactId><version>\${munit.version}</version></plugin>
+          <plugin><artifactId>mule-maven-plugin</artifactId></plugin>
+        </plugins>
+      </build>
+    </project>`;
+    expect(getPluginVersion(pom, 'munit-maven-plugin')).toBe('3.1.0');
+    expect(getPluginVersion(pom, 'mule-maven-plugin')).toBe('4.3.0');
+    expect(munitVersions(pom)).toEqual({ plugin: '3.1.0', runner: '3.0.0', tools: '3.1.0' });
+    expect(
+      getDependencies(pom).find((dependency) => dependency.artifactId === 'sample-connector')
+        ?.version
+    ).toBe('2.0.0');
+    expect(
+      getPluginVersion(
+        '<project><build><pluginManagement><plugins><plugin><artifactId>munit-maven-plugin</artifactId><version>3.1.0</version></plugin></plugins></pluginManagement></build></project>',
+        'munit-maven-plugin'
+      )
+    ).toBeUndefined();
   });
 
   it('reads the MUnit plugin, runner, and tools versions with properties resolved', () => {

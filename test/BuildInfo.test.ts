@@ -79,6 +79,12 @@ describe('build-info marker', () => {
     );
   });
 
+  it('returns undefined instead of throwing for bytes that are not a ZIP', () => {
+    expect(readBuildInfo(strToU8('not a jar'))).toBeUndefined();
+    const jar = zipSync(entries);
+    expect(readBuildInfo(jar.subarray(0, jar.length - 10))).toBeUndefined();
+  });
+
   it('reads no marker from an unmarked or inconsistent JAR', () => {
     expect(readBuildInfo(zipSync(entries))).toBeUndefined();
     const inconsistent = zipSync({

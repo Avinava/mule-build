@@ -128,4 +128,8 @@ This ordering avoids leaving a newly-started runtime behind after a failed build
 
 ## Release transaction limits
 
-The release API restores `pom.xml` if the commit step fails. Once a commit or tag exists, failures are reported as partial state with explicit recovery guidance; history is not rewritten automatically. This avoids destructive rollback in shared repositories.
+A release is a transaction. Version, tag-history, branch, and remote checks all run before the first
+change. The branch and tag go out in one `git push --atomic`, so a failure at any step leaves nothing
+on the remote. The release then rolls back only local state it created itself: it deletes the new tag,
+undoes the release commit with `git reset --soft`, and restores the original `pom.xml` bytes. Shared
+history is never rewritten. If the rollback itself fails, the error names what is left to repair.

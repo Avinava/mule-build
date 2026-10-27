@@ -6,7 +6,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { packageProject } from '../api/package.js';
 import { testProject } from '../api/test.js';
-import { releaseVersion } from '../api/release.js';
+import { releaseVersion, validatePreid, validateReleaseVersion } from '../api/release.js';
 import { runLocal } from '../api/run.js';
 import { enforceSecure, formatFinding } from '../api/enforce.js';
 import { checkCompatibility } from '../api/compat.js';
@@ -517,6 +517,13 @@ export class MuleBuildMcpServer {
         }
         if (preid !== undefined && bump !== 'prerelease') {
           throw new Error('preid is only valid with bump=prerelease');
+        }
+        // Validate before interpolating, so arguments cannot inject instructions.
+        for (const check of [
+          version === undefined ? undefined : validateReleaseVersion(version),
+          preid === undefined ? undefined : validatePreid(preid),
+        ]) {
+          if (check && !check.success) throw check.error ?? new Error('Invalid release argument');
         }
         const target =
           version !== undefined

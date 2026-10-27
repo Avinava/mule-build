@@ -104,7 +104,7 @@ deployer can tell from the JAR alone whether it may go to production:
 | `schemaVersion` | number | Always `1` for this layout |
 | `tool` | string | Always `mule-build` |
 | `toolVersion` | string | The `mule-build` version that packaged the JAR |
-| `stripped` | boolean | `true` when built with `--strip-secure` (secure properties removed) |
+| `stripped` | boolean | `true` when built with `--strip-secure`, or when the sources were [stripped in place](#sources-stripped-in-place) |
 | `productionDeployable` | boolean | Always `!stripped`. `false` means the JAR must not be deployed to production |
 
 The file is written for stripped and non-stripped builds alike, and carries no values from the build
@@ -114,6 +114,26 @@ already contain that path, so a project cannot supply its own marker. A deployer
 without the file as built outside `mule-build`, and refuse one with `productionDeployable: false` for a
 production target. The package result also returns `stripped`, `productionDeployable`, and `buildInfo`,
 and `deployment-info.txt` records both flags.
+
+### Sources stripped in place
+
+A normal `package` also marks the JAR `stripped: true, productionDeployable: false` when the sources
+themselves lost their `secure::` prefixes, for example after `mule-build strip`. Either signal is enough:
+
+- **An encrypted value referenced without `secure::`.** A key whose value is `![...]` in a YAML or
+  `.properties` file under `src/main/resources` only resolves through `secure::`, so `${key}` or
+  `p('key')` in `src/main/mule` (XML or DataWeave) means the prefix was removed.
+- **The strip record.** `mule-build strip` (without `--dry-run`) writes
+  `.mule-build/strip-state.json` with the keys it unprefixed in each file:
+  `{"schemaVersion":1,"files":[{"file":"src/main/mule/orders.xml","keys":["db.password"]}]}`.
+  While a recorded file still references a recorded key without `secure::`, the sources count as
+  stripped. This catches keys whose encrypted values are not in the project. An unreadable record also
+  counts as stripped.
+
+Each piece of evidence is a `MB-SEC-008` warning naming the file, line, and key (never a value). A
+profile with `secureProperties: enforce`, such as `production`, refuses to build stripped sources.
+Restoring the `secure::` references makes the sources deployable again even if the record remains;
+delete `.mule-build/strip-state.json` once you have restored them.
 
 ## `run`
 
@@ -242,7 +262,15 @@ connector without the annotation is assumed to support Java 8 and 11, as Mule as
 `munit-maven-plugin` (or the `munit.version` property), and the `munit-runner` and `munit-tools`
 dependencies. They appear in the result as `munit.plugin`, `munit.runner`, and `munit.tools`. The Java 17
 check (`MB-TC-002`, MUnit 3.1.0 or later) uses the lowest of them, and the Mule 4.3.0 minimum for MUnit
-3 uses the highest. Versions that stay unresolved (for example, set in a parent POM) are skipped.
+3 uses the highest. MUnit and mule-maven-plugin versions are compared in Maven order, so
+`3.1.0-rc.1` and `3.1.0-SNAPSHOT` count as older than `3.1.0`. Versions that stay unresolved (for
+example, set in a parent POM) are skipped.
+
+Plugin versions come from the plugin declared under `<build><plugins>`. A declared plugin without a
+version takes the one in `<build><pluginManagement>`, and a plugin that appears only in
+`<pluginManagement>` is not part of the build, so it is ignored. In the same way, a dependency without
+a version takes it from the POM's own `<dependencyManagement>`. Versions from a parent POM or an
+imported BOM are not read.
 
 ```bash
 mule-build compat
@@ -266,6 +294,10 @@ mule-build strip --dry-run
 
 During a build, stripping happens in an isolated staged copy instead, so `package --strip-secure`
 never touches your checkout.
+
+A real `strip` records what it removed in `.mule-build/strip-state.json`, so a later `package` of the
+stripped sources is [marked not production deployable](#sources-stripped-in-place). `--dry-run` writes
+nothing.
 
 ## `release`
 
@@ -294,10 +326,29 @@ example from `1.4.2-rc.1` to `hotfix`) is refused; use `--version`. An explicit 
 `major.minor.patch` with an optional `-prerelease`: no `v` prefix, no leading zeros, and no `+build`
 metadata. Four-part versions such as `1.4.2.1` are rejected because the Mule Maven plugin rejects them.
 
-The preview prints the old and new versions, planned tag, and push intent, then confirms that no files
-or Git state changed. The real release targets the current branch and newly created tag only; it does
-not push unrelated tags. `doctor --operation release` checks that the project is in a Git repository
-with a clean working tree before you begin.
+Bumps from a prerelease follow Maven version order:
+
+| Current | Kind | `--bump patch` | `--bump minor` |
+| --- | --- | --- | --- |
+| `1.4.2-hotfix.1` | Post-release: Maven orders an unknown qualifier (or `sp`) after `1.4.2`, which was already released | `1.4.3` | `1.5.0` |
+| `1.5.0-rc.1` | Pre-release: `alpha`, `beta`, `milestone`, `rc`, and `SNAPSHOT` precede `1.5.0` | `1.5.0` | `1.5.0` |
+
+Every new version must be newer than the current one in Maven order.
+
+Before changing anything, the release refuses when:
+
+- tag `v<new version>` already exists anywhere, even with `--no-tag`, since that version was released;
+- the new version is not newer, in Maven order, than every `v<version>` tag reachable from `HEAD`. Tags
+  on other branches, such as a newer release line, do not block a maintenance release;
+- pushing is planned but `HEAD` is detached or no `origin` remote exists.
+
+The preview runs the same version and tag checks and fails the same way. It lists push blockers as
+warnings. The real release then edits `pom.xml`, builds, commits, tags, and pushes the branch and tag in
+one atomic `git push --atomic`, so the remote takes both or neither. If any step fails, the release
+rolls back: the new tag is deleted, the release commit is undone with `git reset --soft`, and `pom.xml`
+is restored byte for byte. Nothing reached the remote, so no shared history is rewritten.
+`doctor --operation release` checks that the project is in a Git repository with a clean working tree
+before you begin.
 
 ## `mcp`
 

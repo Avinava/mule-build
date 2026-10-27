@@ -3,7 +3,12 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { nextReleaseVersion, releaseVersion, validateReleaseVersion } from '../src/api/release.js';
+import {
+  nextReleaseVersion,
+  releaseVersion,
+  validatePreid,
+  validateReleaseVersion,
+} from '../src/api/release.js';
 
 vi.mock('../src/engine/MavenBuilder.js', async (original) => ({
   ...(await original<typeof import('../src/engine/MavenBuilder.js')>()),
@@ -92,6 +97,17 @@ describe('nextReleaseVersion', () => {
     expect(nextReleaseVersion('1.4.2-hotfix', { bump: 'prerelease' }).data).toBe('1.4.2-hotfix.1');
   });
 
+  it('increments large prerelease counters exactly', () => {
+    expect(nextReleaseVersion('1.4.2-hotfix.9007199254740993', { bump: 'prerelease' }).data).toBe(
+      '1.4.2-hotfix.9007199254740994'
+    );
+  });
+
+  it('validates the prerelease identifier as a preid', () => {
+    expect(validatePreid('hotfix').success).toBe(true);
+    expect(validatePreid('hot"fix').success).toBe(false);
+  });
+
   it('rejects ambiguous prerelease bumps', () => {
     expect(nextReleaseVersion('1.4.2', { bump: 'prerelease' }).error?.message).toContain(
       'needs an identifier'
@@ -109,7 +125,15 @@ describe('nextReleaseVersion', () => {
   it('keeps the standard bumps', () => {
     expect(nextReleaseVersion('1.4.2', { bump: 'patch' }).data).toBe('1.4.3');
     expect(nextReleaseVersion('1.4.2', { bump: 'minor' }).data).toBe('1.5.0');
-    expect(nextReleaseVersion('1.4.2-hotfix.1', { bump: 'patch' }).data).toBe('1.4.2');
+    // A hotfix is a post-release of 1.4.2, so the next patch is 1.4.3, never a rewind to 1.4.2.
+    expect(nextReleaseVersion('1.4.2-hotfix.1', { bump: 'patch' }).data).toBe('1.4.3');
+    expect(nextReleaseVersion('1.4.2-hotfix.1', { bump: 'minor' }).data).toBe('1.5.0');
+    // A release candidate precedes its release, so patch promotes it.
+    expect(nextReleaseVersion('1.5.0-rc.1', { bump: 'patch' }).data).toBe('1.5.0');
+    expect(nextReleaseVersion('1.5.0-SNAPSHOT', { bump: 'minor' }).data).toBe('1.5.0');
+    expect(nextReleaseVersion('1.4.2', { version: '1.4.1' }).error?.message).toContain(
+      'not newer than the current version'
+    );
   });
 
   it('accepts only strict semantic versions as explicit versions', () => {

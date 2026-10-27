@@ -52,7 +52,7 @@ Both tools classify sensitive keys identically, and
 (`MB-CMP-*`) and toolchain checks (`MB-TC-*`) need resolved connector JARs and the local JDK, so only
 `mule-build` runs them. Neither tool reads the other's reports or exit codes.
 
-Rules that cover the same ground, as of mule-lint 2.1.0:
+Rules that cover the same ground, as of mule-lint 2.2.0:
 
 | mule-build | mule-lint | Notes |
 | --- | --- | --- |
@@ -62,6 +62,7 @@ Rules that cover the same ground, as of mule-lint 2.1.0:
 | `MB-SEC-006` | `SEC-017` | Both are errors |
 | `MB-SEC-007` | `SEC-018` | Both are warnings |
 | `MB-CMP-005` (descriptor Java vs `minMuleVersion`) | `OPS-005` | mule-lint warns only when no declared Java version is supported |
+| `MB-TC-007`, `MB-TC-002` (MUnit versions) | `TEST-002` | `TEST-002` checks declared Java 17 and is a warning; `MB-TC-002` also checks the JDK in use and is an error |
 
 ## A note on the name
 

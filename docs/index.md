@@ -1,6 +1,6 @@
 <div class="hero" markdown>
 
-![mule-build](assets/logo.svg){ width="520" }
+![Mule Build: validate, test, package and release Mule 4 apps](assets/logo.svg){ width="520" }
 
 # Build your Mule application without learning Node.js
 
@@ -72,7 +72,8 @@ mule-build package
   Maven warnings: 0
 ```
 
-The result is a local Mule application JAR. Publishing and deployment are separate Anypoint tasks;
+The result is a local Mule application JAR. Its build-info marker records whether it is production
+deployable, so a deployer can refuse a `--strip-secure` build for production. Publishing and deployment are separate Anypoint tasks;
 see the [ecosystem boundary](ecosystem.md).
 
 ## Know what can write

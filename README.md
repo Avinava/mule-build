@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="mule-build" width="560" />
+  <img src="docs/assets/logo.svg" alt="Mule Build: validate, test, package and release Mule 4 apps" width="640" />
 </p>
 
 <p align="center">
@@ -8,7 +8,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/@sfdxy/mule-build?style=flat-square&color=818cf8" alt="License" /></a>
 </p>
 
-<p align="center"><strong>A familiar build path for MuleSoft projects: check, test, package.</strong></p>
+<p align="center"><strong>A familiar build path for MuleSoft projects: check, test, package, release.</strong></p>
 
 `mule-build` wraps the Maven and Mule operations you already use. Node.js is only the small runtime
 that starts the command; you do not need to write JavaScript or understand a Node project.
@@ -53,13 +53,13 @@ The JAR stays in `target/`. `mule-build` does not publish to Exchange or deploy 
 | Command | What it means |
 | --- | --- |
 | `doctor` | Check Maven, POM, Mule/MUnit plugins, source layout, runtime, or Git readiness |
-| `test` | Run all MUnit tests or select a suite, test, or tags |
-| `package` | Run the Mule Maven package lifecycle and copy the final JAR to `target/` |
+| `test` | Run all MUnit tests or select a suite, test, or tags, and report the JDK Maven ran on |
+| `package` | Run the Mule Maven package lifecycle and copy the final JAR, with its build-info marker, to `target/` |
 | `enforce` | Find secrets that would ship in the JAR: unsecured references, literal credentials, plaintext config values |
 | `compat` | Check connectors, `mule-artifact.json`, Maven JDK, and MUnit against the target Mule runtime and Java |
 | `run` | Build and deploy to a compatible Mule runtime on your machine |
 | `status`, `stop` | Inspect or stop that resolved local runtime |
-| `release` | Change the POM version, build, commit, tag, and optionally push |
+| `release` | Change the POM version (a bump, a prerelease such as `1.4.2-hotfix.1`, or an explicit version), build, commit, tag, and optionally push |
 | `strip` | Directly remove `secure::` prefixes from source XML |
 | `mcp` | Let an MCP-capable coding agent call the same operations |
 

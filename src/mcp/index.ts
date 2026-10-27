@@ -181,7 +181,12 @@ export class MuleBuildMcpServer {
       async (args) => {
         const result = await runLocal(args);
         return result.success && result.data
-          ? success(result.data.message, result.data)
+          ? success(
+              result.data.stripped
+                ? `${result.data.message}. Secure properties were stripped; this JAR is marked productionDeployable=false and must not be deployed to production.`
+                : result.data.message,
+              result.data
+            )
           : buildFailure(result.error);
       }
     );
@@ -491,21 +496,44 @@ export class MuleBuildMcpServer {
       {
         description: 'Preview and confirm a safe Mule release.',
         argsSchema: {
-          bump: z.enum(['major', 'minor', 'patch']),
+          bump: z
+            .enum(['major', 'minor', 'patch', 'prerelease'])
+            .optional()
+            .describe('Required unless version is given'),
+          preid: z
+            .string()
+            .optional()
+            .describe('Prerelease identifier for bump=prerelease, e.g. hotfix'),
+          version: z
+            .string()
+            .optional()
+            .describe('Explicit strict semantic version instead of bump'),
           projectPath: z.string().optional(),
         },
       },
-      async ({ bump, projectPath }) => ({
-        messages: [
-          {
-            role: 'user',
-            content: {
-              type: 'text',
-              text: `For ${projectPath ?? 'the current Mule project'}, run system_check operation="release", enforce_security, and check_compatibility. Then call release_version with bump="${bump}" and confirm=false. Show the preview and ask me before calling it with confirm=true.`,
+      async ({ bump, preid, version, projectPath }) => {
+        if ((bump === undefined) === (version === undefined)) {
+          throw new Error('Pass either bump or version to release-checklist');
+        }
+        if (preid !== undefined && bump !== 'prerelease') {
+          throw new Error('preid is only valid with bump=prerelease');
+        }
+        const target =
+          version !== undefined
+            ? `version="${version}"`
+            : `bump="${bump}"${preid !== undefined ? ` and preid="${preid}"` : ''}`;
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `For ${projectPath ?? 'the current Mule project'}, run system_check operation="release", enforce_security, and check_compatibility. Then call release_version with ${target} and confirm=false. Show the preview and ask me before calling it with confirm=true.`,
+              },
             },
-          },
-        ],
-      })
+          ],
+        };
+      }
     );
     this.server.registerPrompt(
       'security-audit',

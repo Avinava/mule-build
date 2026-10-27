@@ -74,7 +74,7 @@ working directory is not the project root.
 | `get_project_config` | Read and validate the resolved `mule-build.yaml` | No |
 | `run_tests` | Run full or focused MUnit tests with structured results, including the effective `jdk` | Writes test reports |
 | `run_build` | Build a package. Refuses non-Mule projects. Returns `stripped`, `productionDeployable`, and `buildInfo` | Produces an artifact |
-| `run_app` | Build, start a compatible runtime if needed, deploy | Starts a runtime |
+| `run_app` | Build, start a compatible runtime if needed, deploy. Returns `stripped`, `productionDeployable`, and `buildInfo` | Starts a runtime |
 | `check_runtime_status` | Actual status of the resolved runtime | No |
 | `stop_runtime` | Stop the resolved runtime | Stops a runtime |
 | `enforce_security` | Find secrets that would ship in the artifact: references missing `secure::`, hardcoded XML credentials, plaintext config secrets, mismatched secret models. Optional `file` and `rules` | No |
@@ -89,6 +89,7 @@ working directory is not the project root.
 | `run_build` | `stripped` | `true` when `stripSecure` removed secure properties |
 | `run_build` | `productionDeployable` | `false` for stripped builds; never deploy such a JAR to production |
 | `run_build` | `buildInfo` | The [build-info marker](cli.md#build-info-marker) written to `META-INF/mule-build/build-info.json` in the JAR |
+| `run_app` | `stripped`, `productionDeployable`, `buildInfo` | The same flags for the JAR deployed to the local runtime |
 | `run_tests` | `jdk` | `javaVersion`, `javaVendor`, `javaHome`, `javaHomeSource` (`JAVA_HOME`, `PATH`, or `override`), `mavenVersion` from `mvn -v`; absent when Maven's JDK could not be read |
 | `check_compatibility` | `munit` | `plugin`, `runner`, and `tools` versions from `pom.xml`, with properties resolved |
 | `release_version` | input `preid` | Prerelease identifier for `bump: "prerelease"`: `1.4.2` -> `1.4.2-hotfix.1` -> `1.4.2-hotfix.2` |
@@ -106,7 +107,7 @@ to say so twice.
 | Prompt | What it drives |
 | --- | --- |
 | `quick-start` | Orient in an unfamiliar Mule project and check readiness |
-| `release-checklist` | Readiness, security scan, and compatibility check, then a previewed release awaiting confirmation |
+| `release-checklist` | Readiness, security scan, and compatibility check, then a previewed release awaiting confirmation. Takes `bump` (`major`, `minor`, `patch`, `prerelease`) with optional `preid`, or an explicit `version` |
 | `security-audit` | Find secrets and unsecured properties and explain the exposure |
 
 Security and compatibility results carry `findings`: each has a stable `code`, a `severity`

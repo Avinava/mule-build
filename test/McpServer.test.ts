@@ -103,4 +103,27 @@ describe('Mule Build MCP protocol', () => {
       ['quick-start', 'release-checklist', 'security-audit'].sort()
     );
   });
+
+  it('drives prerelease and explicit-version releases from release-checklist', async () => {
+    const listed = await client.listPrompts();
+    const checklist = listed.prompts.find((prompt) => prompt.name === 'release-checklist');
+    expect(checklist?.arguments?.map((argument) => argument.name).sort()).toEqual(
+      ['bump', 'preid', 'projectPath', 'version'].sort()
+    );
+    const text = async (args: Record<string, string>) => {
+      const prompt = await client.getPrompt({ name: 'release-checklist', arguments: args });
+      const content = prompt.messages[0].content;
+      return content.type === 'text' ? content.text : '';
+    };
+    expect(await text({ bump: 'patch' })).toContain('bump="patch" and confirm=false');
+    expect(await text({ bump: 'prerelease', preid: 'hotfix' })).toContain(
+      'bump="prerelease" and preid="hotfix" and confirm=false'
+    );
+    expect(await text({ version: '1.4.3' })).toContain('version="1.4.3" and confirm=false');
+    await expect(text({})).rejects.toThrow('either bump or version');
+    await expect(text({ bump: 'patch', version: '1.4.3' })).rejects.toThrow(
+      'either bump or version'
+    );
+    await expect(text({ bump: 'patch', preid: 'hotfix' })).rejects.toThrow('preid');
+  });
 });

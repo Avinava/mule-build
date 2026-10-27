@@ -291,6 +291,12 @@ export interface RunResult {
   runtime: ResolvedRuntime;
   running: boolean;
   debug: boolean;
+  /** Whether secure properties were stripped from the deployed JAR. Set by runLocal. */
+  stripped?: boolean;
+  /** False for stripped builds. Set by runLocal. */
+  productionDeployable?: boolean;
+  /** The marker in META-INF/mule-build/build-info.json of the deployed JAR. Set by runLocal. */
+  buildInfo?: BuildInfo;
 }
 
 /**

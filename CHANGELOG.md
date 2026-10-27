@@ -10,8 +10,11 @@
   `stripped: true, productionDeployable: false`, so a deployer can refuse it from the JAR alone. The
   entry is appended without rewriting existing entries and is also written to the Maven output in
   `target/`. A project that ships its own file at that path fails the build.
-- `PackageResult` and MCP `run_build` return `stripped`, `productionDeployable`, and `buildInfo`;
-  `deployment-info.txt` records both flags. `readBuildInfo` and `BUILD_INFO_PATH` are exported.
+- `PackageResult`, `RunResult`, and MCP `run_build` and `run_app` return `stripped`,
+  `productionDeployable`, and `buildInfo`; `deployment-info.txt` records both flags. `readBuildInfo`
+  and `BUILD_INFO_PATH` are exported.
+- The `release-checklist` MCP prompt accepts `bump: "prerelease"` with `preid`, or an explicit
+  `version`, instead of a required `major`/`minor`/`patch` bump.
 - `release --bump prerelease --preid <id>` and MCP `bump: "prerelease"` with `preid`: `1.4.2` becomes
   `1.4.2-hotfix.1`, then `1.4.2-hotfix.2`.
 - `release --version <version>` and MCP `version` release an explicit strict semantic version.

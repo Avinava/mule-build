@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { testJdk, testProject } from '../src/api/test.js';
 import { parseTestMetrics } from '../src/api/test.js';
 import { javaHomeSource, parseMavenVersionOutput } from '../src/engine/Toolchain.js';
@@ -20,6 +20,8 @@ vi.mock('../src/engine/MavenBuilder.js', async (original) => ({
 }));
 
 describe('effective test JDK', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   const maven = parseMavenVersionOutput(
     [
       'Apache Maven 3.9.9 (sample)',
@@ -28,7 +30,7 @@ describe('effective test JDK', () => {
   );
 
   it('reports the Maven JDK and that JAVA_HOME selected it', () => {
-    expect(testJdk(maven, '/opt/jdk-17/')).toEqual({
+    expect(testJdk(maven, { JAVA_HOME: '/opt/jdk-17/' })).toEqual({
       javaVersion: '17',
       javaVendor: 'Eclipse Adoptium',
       javaHome: '/opt/jdk-17',
@@ -37,19 +39,47 @@ describe('effective test JDK', () => {
     });
   });
 
+  // Every case passes its own environment, so the runner's JAVA_HOME never leaks in.
   it('distinguishes PATH selection and an override of JAVA_HOME', () => {
-    expect(testJdk(maven, undefined)?.javaHomeSource).toBe('PATH');
-    expect(testJdk(maven, '')?.javaHomeSource).toBe('PATH');
-    expect(testJdk(maven, '/opt/jdk-21')?.javaHomeSource).toBe('override');
+    expect(testJdk(maven, {})?.javaHomeSource).toBe('PATH');
+    expect(testJdk(maven, { JAVA_HOME: undefined })?.javaHomeSource).toBe('PATH');
+    expect(testJdk(maven, { JAVA_HOME: '' })?.javaHomeSource).toBe('PATH');
+    expect(testJdk(maven, { JAVA_HOME: '  ' })?.javaHomeSource).toBe('PATH');
+    expect(testJdk(maven, { JAVA_HOME: '/opt/jdk-21' })?.javaHomeSource).toBe('override');
+  });
+
+  it('classifies setup-java style runners correctly', () => {
+    const toolcache = '/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.12-7/x64';
+    const runner = parseMavenVersionOutput(
+      `Apache Maven 3.9.9\nJava version: 17.0.12, vendor: Eclipse Adoptium, runtime: ${toolcache}`
+    );
+    // setup-java exports JAVA_HOME and Maven uses it.
+    expect(testJdk(runner, { JAVA_HOME: toolcache })?.javaHomeSource).toBe('JAVA_HOME');
+    // JAVA_HOME unset: Maven falls back to the java on PATH.
+    expect(testJdk(runner, {})?.javaHomeSource).toBe('PATH');
+    // JAVA_HOME points elsewhere (for example ~/.mavenrc or a wrapper replaced it).
+    expect(
+      testJdk(runner, { JAVA_HOME: '/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.4-7/x64' })
+        ?.javaHomeSource
+    ).toBe('override');
+  });
+
+  it('reads JAVA_HOME from process.env by default', () => {
+    vi.stubEnv('JAVA_HOME', '/opt/jdk-17');
+    expect(testJdk(maven)?.javaHomeSource).toBe('JAVA_HOME');
+    vi.stubEnv('JAVA_HOME', undefined);
+    expect(testJdk(maven)?.javaHomeSource).toBe('PATH');
   });
 
   it('matches Java 8 jre homes and symlinked JAVA_HOME values', () => {
-    expect(javaHomeSource('/opt/jdk8/jre', '/opt/jdk8')).toBe('JAVA_HOME');
+    expect(javaHomeSource('/opt/jdk8/jre', { JAVA_HOME: '/opt/jdk8' })).toBe('JAVA_HOME');
     const root = mkdtempSync(join(tmpdir(), 'mule-build-jdk-'));
     try {
       mkdirSync(join(root, 'jdk-17'));
       symlinkSync(join(root, 'jdk-17'), join(root, 'current'));
-      expect(javaHomeSource(join(root, 'jdk-17'), join(root, 'current'))).toBe('JAVA_HOME');
+      expect(javaHomeSource(join(root, 'jdk-17'), { JAVA_HOME: join(root, 'current') })).toBe(
+        'JAVA_HOME'
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -57,15 +87,17 @@ describe('effective test JDK', () => {
 
   it('includes the JDK in the run_tests result', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mule-build-test-jdk-'));
+    vi.stubEnv('JAVA_HOME', '/opt/jdk-17');
     try {
       const result = await testProject({ cwd: root });
       expect(result.data?.metrics.testsRun).toBe(3);
-      expect(result.data?.jdk).toMatchObject({
+      expect(result.data?.jdk).toEqual({
         javaVersion: '17',
+        javaVendor: 'Sample',
         javaHome: '/opt/jdk-17',
+        javaHomeSource: 'JAVA_HOME',
         mavenVersion: '3.9.9',
       });
-      expect(['JAVA_HOME', 'PATH', 'override']).toContain(result.data?.jdk?.javaHomeSource);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -77,7 +109,7 @@ describe('effective test JDK', () => {
   });
 
   it('never returns the JAVA_HOME value itself, only Maven facts', () => {
-    const report = JSON.stringify(testJdk(maven, '/secret/location'));
+    const report = JSON.stringify(testJdk(maven, { JAVA_HOME: '/secret/location' }));
     expect(report).not.toContain('/secret/location');
   });
 });

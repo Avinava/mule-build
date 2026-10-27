@@ -65,14 +65,19 @@ function canonicalPath(path: string): string {
   }
 }
 
+/** The only environment variable the JDK source check reads. */
+export type JavaHomeEnv = { readonly JAVA_HOME?: string };
+
 /**
- * Whether Maven's java.home came from JAVA_HOME. Only the JAVA_HOME variable is
- * read, and it is compared, never returned.
+ * Whether Maven's java.home came from JAVA_HOME. Only `env.JAVA_HOME` is read,
+ * and it is compared, never returned. The environment is passed as an object
+ * (not a string defaulting to process.env), so an unset JAVA_HOME is expressible.
  */
 export function javaHomeSource(
   javaHome: string | undefined,
-  envJavaHome: string | undefined = process.env.JAVA_HOME
+  env: JavaHomeEnv = process.env
 ): JavaHomeSource | undefined {
+  const envJavaHome = env.JAVA_HOME;
   if (!envJavaHome?.trim()) return 'PATH';
   if (!javaHome) return undefined;
   const runtime = canonicalPath(javaHome);
